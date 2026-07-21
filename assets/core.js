@@ -113,6 +113,67 @@ function badgeStatus(s) {
   return `<span class="badge ${m[s]||'cinza'}">${l[s]||s}</span>`;
 }
 
+// ── DOCUMENTO IMPRIMÍVEL (Pedido de Compra, listas de material...) ──
+function abrirDocumentoImpressao(titulo, subtitulo, corpoHtml) {
+  const w = window.open('', '_blank');
+  if (!w) { toast('Permita pop-ups para gerar o documento.', 'aviso'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>${titulo}</title>
+    <style>
+      * { box-sizing:border-box; }
+      body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:32px; color:#111827; max-width:900px; margin:0 auto; }
+      h1 { font-size:1.3rem; margin:0 0 2px; }
+      .sub { color:#6B7280; font-size:.85rem; margin-bottom:22px; }
+      table { width:100%; border-collapse:collapse; margin-top:10px; }
+      th, td { border:1px solid #E5E7EB; padding:8px 10px; font-size:.85rem; text-align:left; }
+      th { background:#F1F5F9; text-transform:uppercase; font-size:.68rem; letter-spacing:.04em; color:#6B7280; }
+      .footer { margin-top:26px; font-size:.72rem; color:#6B7280; border-top:1px solid #E5E7EB; padding-top:10px; }
+      .btn-imprimir { margin-bottom:18px; padding:9px 18px; background:#05AAFB; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:.85rem; }
+      @media print { .no-print { display:none !important; } }
+    </style></head><body>
+    <button class="no-print btn-imprimir" onclick="window.print()">🖨️ Imprimir / Salvar como PDF</button>
+    <h1>${titulo}</h1>
+    <div class="sub">${subtitulo}</div>
+    ${corpoHtml}
+    <div class="footer">Gerado em ${new Date().toLocaleString('pt-BR')} — VN Engenharia</div>
+    </body></html>`);
+  w.document.close();
+}
+
+// ── EXPORTAR MATERIAIS FALTANTES (obras "cliente fornece o material") ──
+function gerarDocumentoMateriaisFaltantes(obra, etapasDaObra) {
+  const linhas = [];
+  (etapasDaObra||[]).forEach(e => (e.materiais||[]).forEach(m => {
+    const falt = Math.max((m.qtdPrevista||0) - (m.qtdEntregue||0), 0);
+    if (falt > 0) linhas.push({ etapa: e.nome, ...m, faltante: falt });
+  }));
+  if (!linhas.length) { toast('Nenhum material faltante encontrado.', 'aviso'); return; }
+  const corpo = `<table><thead><tr>
+      <th>Etapa</th><th>Material</th><th>Unidade</th><th>Qtd Prevista</th><th>Já Entregue</th><th>Faltante</th>
+    </tr></thead><tbody>
+    ${linhas.map(l => `<tr>
+      <td>${esc(l.etapa)}</td><td>${esc(l.nome)}</td><td>${esc(l.unidade||'—')}</td>
+      <td>${l.qtdPrevista||0}</td><td>${l.qtdEntregue||0}</td><td><strong>${l.faltante}</strong></td>
+    </tr>`).join('')}
+    </tbody></table>`;
+  const sub = `${obra.cliente?`Cliente: ${esc(obra.cliente)} · `:''}Gerado em ${new Date().toLocaleDateString('pt-BR')}`;
+  abrirDocumentoImpressao(`Materiais Faltantes — ${esc(obra.nome)}`, sub, corpo);
+}
+
+// ── PEDIDO DE COMPRA ↔ ENTREGA (interligação) ──
+// Ao registrar entrega de um material vinculado a um pedido, atualiza o item e o status do pedido.
+function atualizarPedidoAposEntrega(pedidosCompra, material) {
+  if (!material.pedidoCompraId) return null;
+  const pedido = (pedidosCompra||[]).find(p => p.id === material.pedidoCompraId);
+  if (!pedido) return null;
+  const item = (pedido.itens||[]).find(i => i.materialId === material.id);
+  if (!item) return null;
+  item.qtdRecebida = material.qtdEntregue || 0;
+  const todosCompletos = pedido.itens.every(i => (i.qtdRecebida||0) >= (i.qtd||0));
+  const algumRecebido  = pedido.itens.some(i => (i.qtdRecebida||0) > 0);
+  pedido.status = todosCompletos ? 'recebido' : algumRecebido ? 'parcial' : 'aberto';
+  return pedido;
+}
+
 // ── TOAST ──
 function toast(msg, tipo = '') {
   const el = document.createElement('div');

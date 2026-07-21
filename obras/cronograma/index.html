@@ -70,6 +70,7 @@
         <span id="sync-texto">Conectando</span>
       </div>
       <button class="btn btn-outline btn-sm no-print" onclick="init()" title="Buscar a versão mais recente do GitHub agora">🔄 Sincronizar agora</button>
+      <button class="btn btn-outline btn-sm no-print" id="btn-exportar-mat" style="display:none;" onclick="exportarMateriaisObra()" title="Exportar lista de materiais faltantes para enviar ao cliente">📤 Exportar Materiais</button>
       <a href="../" class="btn btn-outline btn-sm">← Obras</a>
       <button class="btn btn-primary" onclick="iniciarAssistenteEtapa()">+ Nova Etapa</button>
     </div>
@@ -289,11 +290,13 @@ document.getElementById('sidebar-placeholder').innerHTML = buildSidebar('obras')
 
 const params  = new URLSearchParams(location.search);
 const OBRA_ID = params.get('obra');
-const PATH_ET = 'data/etapas.json';
+const PATH_ET  = 'data/etapas.json';
+const PATH_PED = 'data/pedidos_compra.json';
 const LS_ET   = 'vne_etapas';
 const LS_OB   = 'vne_obras';
+const LS_PED  = 'vne_pedidos_compra';
 
-let etapas = [], shaEt = null, obra = null;
+let etapas = [], shaEt = null, obra = null, pedidosCompra = [], shaPed = null;
 let filtro = '', idEdit = null, clId = null;
 
 const SLbl = {
@@ -320,13 +323,14 @@ async function init() {
   etapas = cache.filter(e => e.obraId === OBRA_ID);
   obra   = (carregarLocal(LS_OB) || []).find(o => o.id === OBRA_ID);
   catalogoMat = carregarLocal('vne_materiais_catalogo') || [];
+  pedidosCompra = carregarLocal(LS_PED) || [];
   renderCatalogoDatalist();
   atualizarHeader(); renderEtapas(); atualizarStats();
 
   if (!configurado()) { setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rE, rO, rM] = await Promise.all([carregarDados(PATH_ET), carregarDados('data/obras.json'), carregarDados('data/materiais_catalogo.json')]);
+    const [rE, rO, rM, rP] = await Promise.all([carregarDados(PATH_ET), carregarDados('data/obras.json'), carregarDados('data/materiais_catalogo.json'), carregarDados(PATH_PED)]);
     const todas = rE.lista; shaEt = rE.sha;
     salvarLocal(LS_ET, todas);
     etapas = todas.filter(e => e.obraId === OBRA_ID);
@@ -334,12 +338,23 @@ async function init() {
     obra = rO.lista.find(o => o.id === OBRA_ID);
     catalogoMat = rM.lista;
     salvarLocal('vne_materiais_catalogo', catalogoMat);
+    pedidosCompra = rP.lista; shaPed = rP.sha;
+    salvarLocal(LS_PED, pedidosCompra);
     renderCatalogoDatalist();
     atualizarHeader(); renderEtapas(); atualizarStats();
     setSyncStatus('verde','Conectado');
   } catch(err) {
     setSyncStatus('vermelho','Erro'); toast('Usando cache local.','aviso');
   }
+}
+
+async function syncPedidos(msg) {
+  salvarLocal(LS_PED, pedidosCompra);
+  if (!configurado()) return;
+  try {
+    const cur = await ghGet(PATH_PED);
+    shaPed = await salvarDados(PATH_PED, pedidosCompra, cur?.sha||null, msg);
+  } catch(err) { toast('Erro ao sincronizar pedido: '+err.message,'aviso'); }
 }
 
 function renderCatalogoDatalist() {
@@ -366,6 +381,18 @@ function atualizarHeader() {
     dias !== null ? (dias >= 0 ? `${dias} dias restantes` : `⚠️ ${Math.abs(dias)} dias em atraso`) : null,
   ].filter(Boolean).join(' · ');
   document.title = `Cronograma — ${obra.nome}`;
+  document.getElementById('btn-exportar-mat').style.display = obra.materialPorConta === 'empresa' ? 'none' : '';
+}
+
+function exportarMateriaisObra() {
+  if (!obra) return;
+  gerarDocumentoMateriaisFaltantes(obra, etapas);
+}
+
+function exportarMateriaisEtapa(etapaId) {
+  if (!obra) return;
+  const e = etapas.find(x => x.id === etapaId); if (!e) return;
+  gerarDocumentoMateriaisFaltantes(obra, [e]);
 }
 
 function atualizarStats() {
@@ -450,6 +477,9 @@ function cardEtapa(e) {
   }
   btns.push(`<button class="btn btn-outline btn-sm" onclick='abrirChecklist("${e.id}")' title="Checklist">📋${cl.length?` ${clFt}/${cl.length}`:''}</button>`);
   btns.push(`<button class="btn btn-outline btn-sm${matsPend.length?' pulsing':''}" onclick='abrirMateriais("${e.id}")' title="Materiais">📦${mats.length?` ${mats.length}`:''}</button>`);
+  if (obra?.materialPorConta !== 'empresa' && mats.length) {
+    btns.push(`<button class="btn btn-outline btn-sm" onclick='exportarMateriaisEtapa("${e.id}")' title="Exportar materiais faltantes desta etapa para o cliente">📤</button>`);
+  }
   btns.push(`<button class="btn btn-outline btn-sm" onclick='editarEtapa("${e.id}")'>✏️</button>`);
   btns.push(`<button class="btn btn-outline btn-sm" style="color:var(--vermelho);" onclick='excluirEtapa("${e.id}")'>🗑</button>`);
 
@@ -855,11 +885,11 @@ function renderMatBody(e) {
         <td><span class="sp ms-${st}" style="font-size:.68rem;padding:2px 7px;">${MatSLbl[st]||st}</span></td>
         <td><div style="display:flex;gap:3px;flex-shrink:0;">
           <button class="btn btn-primary btn-sm" onclick='abrirMatUpd("${m.id}")' title="Atualizar quantidades">📥</button>
-          ${m.pedidoCompra
-            ?`<span style="font-size:.68rem;color:var(--texto-leve);padding:2px 4px;">🛒 Solicitado</span>`
-            : obra?.materialPorConta === 'empresa'
-              ?`<span style="font-size:.68rem;color:var(--texto-leve);padding:2px 4px;" title="Material incluso nesta obra — o pedido é gerado em Compras › Necessidade de Compra">🧾 Auto (Compras)</span>`
-              :`<button class="btn btn-outline btn-sm" onclick='solicitarCompra("${m.id}")' title="Solicitar compra">🛒</button>`}
+          ${obra?.materialPorConta === 'empresa'
+            ? (m.pedidoCompra
+                ? `<span style="font-size:.68rem;color:var(--texto-leve);padding:2px 4px;" title="Já está em um pedido de compra — veja em Compras › Pedidos de Compra">🛒 Em pedido</span>`
+                : `<span style="font-size:.68rem;color:var(--texto-leve);padding:2px 4px;" title="Material incluso nesta obra — o pedido é gerado em Compras › Necessidade de Compra">🧾 Auto (Compras)</span>`)
+            : ''}
           <button class="btn btn-outline btn-sm" style="color:var(--vermelho);" onclick='removerMat("${m.id}")'>✕</button>
         </div></td>
       </tr>`;
@@ -880,7 +910,7 @@ async function addMat() {
     qtdComprada:0, qtdEntregue:0, qtdReservada:0, qtdUtilizada:0,
     fornecedor:    document.getElementById('mn-forn').value.trim(),
     valorPrevisto: parseFloat(document.getElementById('mn-valprev').value)||0,
-    valorComprado:0, pedidoCompra:false, solicitacaoData:null, obs:''
+    valorComprado:0, pedidoCompra:false, pedidoCompraId:null, solicitacaoData:null, obs:''
   });
   ['mn-nome','mn-unid','mn-forn'].forEach(id => document.getElementById(id).value = '');
   ['mn-prev','mn-min','mn-valprev'].forEach(id => document.getElementById(id).value = '');
@@ -897,16 +927,6 @@ async function removerMat(mid) {
   e.materiais = (e.materiais||[]).filter(m => m.id !== mid);
   renderMatBody(e);
   await sync(`Material removido: ${nome}`);
-}
-
-async function solicitarCompra(mid) {
-  const e = etapas.find(x => x.id === matId); if (!e) return;
-  const m = (e.materiais||[]).find(x => x.id === mid); if (!m) return;
-  m.pedidoCompra = true;
-  m.solicitacaoData = hoje();
-  renderMatBody(e);
-  await sync(`Solicitação: ${m.nome}`);
-  toast(`Compra solicitada: ${m.nome}`, 'sucesso');
 }
 
 function abrirMatUpd(mid) {
@@ -937,7 +957,9 @@ async function salvarMatUpd() {
   m.obs          = document.getElementById('mup-obs').value.trim();
   fecharMatUpd();
   renderMatBody(e);
+  const pedidoAtualizado = atualizarPedidoAposEntrega(pedidosCompra, m);
   await sync(`Atualização: ${m.nome}`);
+  if (pedidoAtualizado) await syncPedidos(`Entrega recebida: ${m.nome}`);
   toast('Quantidades atualizadas!', 'sucesso');
 }
 

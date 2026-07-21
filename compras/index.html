@@ -94,7 +94,7 @@
         <button class="chip ativo" id="tab-pendentes" onclick="setTab('pendentes')">⚠️ Pendentes para Iniciar</button>
         <button class="chip" id="tab-todos"   onclick="setTab('todos')">📦 Todos os Materiais</button>
         <button class="chip" id="tab-necessidade" onclick="setTab('necessidade')">🧾 Necessidade de Compra</button>
-        <button class="chip" id="tab-pedidos" onclick="setTab('pedidos')">🛒 Pedidos Solicitados</button>
+        <button class="chip" id="tab-pedidos" onclick="setTab('pedidos')">🛒 Pedidos de Compra</button>
         <div style="flex:1;"></div>
         <select id="filtro-obra" class="form-control" style="width:220px;" onchange="render()">
           <option value="">Todas as Obras</option>
@@ -136,19 +136,53 @@
   </div>
 </div>
 
+<!-- ══ MODAL PEDIDO DE COMPRA ══ -->
+<div class="overlay" id="modal-pedido">
+  <div class="modal" style="max-width:640px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-header">
+      <h2>🛒 Novo Pedido de Compra</h2>
+      <button class="btn-fechar" onclick="fecharModalPedido()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding:0 20px 4px;">
+      <div class="form-campo"><label>Fornecedor *</label><input type="text" id="ped-fornecedor" placeholder="Nome do fornecedor"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-campo"><label>Contato (telefone/e-mail)</label><input type="text" id="ped-contato" placeholder="Opcional"/></div>
+        <div class="form-campo"><label>Prazo de Entrega Previsto</label><input type="date" id="ped-prazo"/></div>
+      </div>
+      <div class="form-campo"><label>Forma de Pagamento</label><input type="text" id="ped-pagamento" placeholder="Ex: 30 dias, à vista, PIX..."/></div>
+      <div class="form-campo"><label>Condições / Observações</label><textarea id="ped-condicoes" rows="2" placeholder="Frete, garantia, condições gerais..."></textarea></div>
+      <div class="form-campo">
+        <label>Itens do Pedido</label>
+        <div id="ped-itens" style="border:1px solid var(--cinza);border-radius:8px;overflow:hidden;"></div>
+        <div style="text-align:right;font-weight:700;margin-top:6px;">Valor Total: <span id="ped-valor-total">R$ 0,00</span></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModalPedido()">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarPedidoCompra()">✓ Gerar Pedido de Compra</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 <script src="../assets/core.js"></script>
 <script>
 document.getElementById('sidebar-placeholder').innerHTML = buildSidebar('compras');
 
-const PATH_ET = 'data/etapas.json';
-const PATH_OB = 'data/obras.json';
+const PATH_ET  = 'data/etapas.json';
+const PATH_OB  = 'data/obras.json';
+const PATH_PED = 'data/pedidos_compra.json';
 const LS_ET   = 'vne_etapas';
 const LS_OB   = 'vne_obras';
+const LS_PED  = 'vne_pedidos_compra';
 
-let etapas = [], obras = [], tab = 'pendentes';
+let etapas = [], obras = [], pedidosCompra = [], shaPed = null, tab = 'pendentes';
 let entEtapaId = null, entMatId = null;
 let selecaoNecessidade = new Set();
+let itensPedidoAtual = [];
+
+const PedStLbl = { aberto:'Aberto', parcial:'Parcial', recebido:'Recebido', cancelado:'Cancelado' };
+const PedStCor = { aberto:'amarelo', parcial:'azul', recebido:'verde', cancelado:'cinza' };
 
 const ClassLbl = {
   obrigatorio_iniciar: 'Obrig. Iniciar',
@@ -173,14 +207,16 @@ function matStatusCalc(m) {
 async function init() {
   etapas = carregarLocal(LS_ET) || [];
   obras  = carregarLocal(LS_OB) || [];
+  pedidosCompra = carregarLocal(LS_PED) || [];
   popularFiltroObra(); atualizarStats(); render();
 
   if (!configurado()) { setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rE, rO] = await Promise.all([carregarDados(PATH_ET), carregarDados(PATH_OB)]);
+    const [rE, rO, rP] = await Promise.all([carregarDados(PATH_ET), carregarDados(PATH_OB), carregarDados(PATH_PED)]);
     etapas = rE.lista; salvarLocal(LS_ET, etapas);
     obras  = rO.lista; salvarLocal(LS_OB, obras);
+    pedidosCompra = rP.lista; shaPed = rP.sha; salvarLocal(LS_PED, pedidosCompra);
     popularFiltroObra(); atualizarStats(); render();
     setSyncStatus('verde','Conectado');
   } catch(err) { setSyncStatus('vermelho','Erro'); toast('Usando cache local.','aviso'); }
@@ -241,16 +277,14 @@ function progColor(pct) {
   return '#ef4444';
 }
 
-function matCardHtml(m, etapaId, showSolicitar = true) {
+function matCardHtml(m, etapaId) {
   const st  = matStatusCalc(m);
   const min = m.qtdMinIniciar || m.qtdPrevista || 0;
   const ent = m.qtdEntregue || 0;
   const pct = min > 0 ? Math.min(100, Math.round(ent / min * 100)) : 0;
 
   const btnRegistrar = `<button class="btn-pill btn-pill-green no-print" onclick='abrirEntrega("${etapaId}","${m.id}")'>📥 Registrar entrega</button>`;
-  const btnSolicitar = m.pedidoCompra
-    ? `<span class="btn-pill btn-pill-done">✓ Compra solicitada</span>`
-    : showSolicitar ? `<button class="btn-pill btn-pill-orange no-print" onclick='solicitarCompra("${etapaId}","${m.id}")'>🛒 Solicitar compra</button>` : '';
+  const seloPedido = m.pedidoCompra ? `<span class="btn-pill btn-pill-done">✓ Em pedido de compra</span>` : '';
 
   return `<div class="mat-card">
     <div class="mat-card-info">
@@ -262,7 +296,7 @@ function matCardHtml(m, etapaId, showSolicitar = true) {
       <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${progColor(pct)};"></div></div>
     </div>` : ''}
     <span class="st-${st}">${MatSLbl[st]||st}</span>
-    <div class="btns-acao">${btnRegistrar}${btnSolicitar}</div>
+    <div class="btns-acao">${btnRegistrar}${seloPedido}</div>
   </div>`;
 }
 
@@ -352,7 +386,7 @@ function renderTodos() {
             </div>
             <span style="margin-left:auto;font-size:.73rem;color:var(--texto-leve);">${(e.materiais||[]).length} material(is)</span>
           </div>
-          ${(e.materiais||[]).map(m => matCardHtml(m, e.id, !m.pedidoCompra)).join('')}
+          ${(e.materiais||[]).map(m => matCardHtml(m, e.id)).join('')}
         </div>`;
       }).join('')}
     </div>`;
@@ -366,47 +400,60 @@ function renderTodos() {
 }
 
 // ── TAB NECESSIDADE DE COMPRA ──
-// Materiais de obras com materialPorConta==='empresa' que ainda não viraram pedido.
+// Empresa compra → seleciona e gera Pedido de Compra. Cliente fornece → só exporta lista de faltantes.
 function chaveMat(etapaId, matId) { return `${etapaId}::${matId}`; }
 
 function renderNecessidade() {
   const filt = document.getElementById('filtro-obra').value;
-  const obraIds = [...new Set(etapas.map(e => e.obraId))]
-    .filter(id => !filt || id === filt)
-    .filter(id => obras.find(o => o.id === id)?.materialPorConta === 'empresa');
+  const obraIds = [...new Set(etapas.map(e => e.obraId))].filter(id => !filt || id === filt);
 
   let html = '', total = 0;
 
   obraIds.forEach(obraId => {
     const obra = obras.find(o => o.id === obraId);
+    const porConta = obra?.materialPorConta === 'empresa' ? 'empresa' : 'cliente';
     const etOb = etapas.filter(e => e.obraId === obraId).sort((a,b)=>(a.ordem||999)-(b.ordem||999));
     const linhas = [];
-    etOb.forEach(e => (e.materiais||[]).filter(m => !m.pedidoCompra).forEach(m => linhas.push({ e, m })));
+    etOb.forEach(e => (e.materiais||[]).forEach(m => {
+      if (porConta === 'empresa') { if (!m.pedidoCompra) linhas.push({ e, m }); }
+      else { if ((m.qtdEntregue||0) < (m.qtdPrevista||0)) linhas.push({ e, m }); }
+    }));
     if (!linhas.length) return;
     total += linhas.length;
 
-    html += `<div class="obra-card">
-      <div class="obra-header">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+    const headerAcao = porConta === 'empresa'
+      ? `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
           <input type="checkbox" onchange='toggleSelecaoObra("${obraId}",this.checked)' ${linhas.every(({e,m})=>selecaoNecessidade.has(chaveMat(e.id,m.id)))?'checked':''}/>
           <div>
             <div class="obra-header-titulo">🏗️ ${esc(obra?obra.nome:obraId)}</div>
             ${obra?.cliente?`<div class="obra-header-sub">${esc(obra.cliente)}</div>`:''}
           </div>
-        </label>
-        <div class="obra-header-badge">${linhas.length} material(is) sem pedido</div>
+        </label>`
+      : `<div>
+          <div class="obra-header-titulo">🏗️ ${esc(obra?obra.nome:obraId)}</div>
+          ${obra?.cliente?`<div class="obra-header-sub">${esc(obra.cliente)}</div>`:''}
+        </div>`;
+
+    html += `<div class="obra-card">
+      <div class="obra-header">
+        ${headerAcao}
+        <div class="obra-header-badge">${linhas.length} material(is) ${porConta==='empresa'?'sem pedido':'faltando'}</div>
+        ${porConta==='cliente'?`<button class="btn btn-outline btn-sm no-print" style="background:#fff;" onclick='exportarNecessidadeObra("${obraId}")'>📤 Exportar Material</button>`:''}
       </div>
       <div style="padding:12px 18px;">
         ${linhas.map(({e, m}) => {
           const k = chaveMat(e.id, m.id);
+          const falt = Math.max((m.qtdPrevista||0)-(m.qtdEntregue||0), 0);
           return `<div class="mat-card">
-            <input type="checkbox" onchange='toggleSelecao("${k}")' ${selecaoNecessidade.has(k)?'checked':''}/>
+            ${porConta==='empresa'?`<input type="checkbox" onchange='toggleSelecao("${k}")' ${selecaoNecessidade.has(k)?'checked':''}/>`:''}
             <div class="mat-card-info">
               <div class="mat-card-nome">${esc(m.nome)}<span class="mat-card-class">${ClassLbl[m.classificacao]||m.classificacao}</span></div>
-              <div class="mat-card-sub">Etapa: <strong>${esc(e.nome)}</strong> · Un.: ${esc(m.unidade||'—')} · Prev.: ${m.qtdPrevista||0}${m.valorPrevisto?` · ${formatarMoeda(m.valorPrevisto)}`:''}</div>
+              <div class="mat-card-sub">Etapa: <strong>${esc(e.nome)}</strong> · Un.: ${esc(m.unidade||'—')} · Prev.: ${m.qtdPrevista||0}${porConta==='cliente'?` · Faltam: <strong>${falt}</strong>`:''}${m.valorPrevisto?` · ${formatarMoeda(m.valorPrevisto)}`:''}</div>
             </div>
             <div class="btns-acao">
-              <button class="btn-pill btn-pill-orange no-print" onclick='solicitarCompra("${e.id}","${m.id}")'>🛒 Gerar pedido</button>
+              ${porConta==='empresa'
+                ? `<button class="btn-pill btn-pill-orange no-print" onclick='abrirModalPedido([{etapaId:"${e.id}",matId:"${m.id}"}])'>🛒 Gerar pedido</button>`
+                : `<button class="btn-pill btn-pill-green no-print" onclick='abrirEntrega("${e.id}","${m.id}")'>📥 Registrar entrega</button>`}
             </div>
           </div>`;
         }).join('')}
@@ -420,7 +467,7 @@ function renderNecessidade() {
           <strong>${selecaoNecessidade.size} selecionado(s)</strong>
           <div style="flex:1;"></div>
           <button class="btn btn-outline btn-sm" onclick="selecaoNecessidade.clear();render();">Limpar seleção</button>
-          <button class="btn btn-primary btn-sm" onclick="gerarPedidosSelecionados()">🛒 Gerar pedidos selecionados</button>
+          <button class="btn btn-primary btn-sm" onclick="gerarPedidoSelecionados()">🛒 Gerar pedido com selecionados</button>
         </div>
       </div>`
     : '';
@@ -428,7 +475,7 @@ function renderNecessidade() {
   document.getElementById('conteudo').innerHTML = total ? (barraSelecao + html) : `<div class="empty-state">
     <div class="icon">🧾</div>
     <div class="titulo">Nenhuma necessidade de compra</div>
-    <div class="desc">Marque uma obra como "Material incluso — empresa compra" em Obras para os materiais dela aparecerem aqui automaticamente.</div>
+    <div class="desc">Materiais de obras "Empresa compra" sem pedido, ou de obras "Cliente fornece" ainda faltando entregar, aparecem aqui automaticamente.</div>
   </div>`;
 }
 
@@ -445,92 +492,181 @@ function toggleSelecaoObra(obraId, checked) {
   renderNecessidade();
 }
 
-async function gerarPedidosSelecionados() {
-  if (!selecaoNecessidade.size) return;
-  const nomes = [];
-  selecaoNecessidade.forEach(k => {
-    const [etapaId, matId] = k.split('::');
-    const e = etapas.find(x => x.id === etapaId); if (!e) return;
-    const m = (e.materiais||[]).find(x => x.id === matId); if (!m) return;
-    m.pedidoCompra = true;
-    m.solicitacaoData = hoje();
-    nomes.push(m.nome);
-  });
-  const qtd = nomes.length;
-  selecaoNecessidade.clear();
-  await syncEtapas(`Pedidos gerados em lote (${qtd} material(is))`);
-  render(); atualizarStats();
-  toast(`${qtd} pedido(s) gerado(s)!`, 'sucesso');
+function gerarPedidoSelecionados() {
+  const itens = [...selecaoNecessidade].map(k => { const [etapaId, matId] = k.split('::'); return { etapaId, matId }; });
+  abrirModalPedido(itens);
 }
 
-// ── TAB PEDIDOS ──
-function renderPedidos() {
-  const filt = document.getElementById('filtro-obra').value;
-  const rows = [];
-  etapas.filter(e => !filt || e.obraId === filt).forEach(e => {
-    const obra = obras.find(o => o.id === e.obraId);
-    (e.materiais||[]).filter(m => m.pedidoCompra).forEach(m => rows.push({ e, obra, m }));
+function exportarNecessidadeObra(obraId) {
+  const obra = obras.find(o => o.id === obraId); if (!obra) return;
+  const etOb = etapas.filter(e => e.obraId === obraId);
+  gerarDocumentoMateriaisFaltantes(obra, etOb);
+}
+
+// ── MODAL PEDIDO DE COMPRA ──
+function abrirModalPedido(itensRef) {
+  itensPedidoAtual = itensRef.map(({etapaId, matId}) => {
+    const e = etapas.find(x => x.id === etapaId);
+    const m = e && (e.materiais||[]).find(x => x.id === matId);
+    if (!e || !m) return null;
+    const qtd = m.qtdPrevista || 0;
+    const valorUnit = qtd > 0 ? (m.valorPrevisto||0) / qtd : 0;
+    return { etapaId, matId, nome: m.nome, etapaNome: e.nome, unidade: m.unidade||'', qtd, valorUnit };
+  }).filter(Boolean);
+  if (!itensPedidoAtual.length) { toast('Nenhum item válido selecionado.','aviso'); return; }
+
+  document.getElementById('ped-fornecedor').value = '';
+  document.getElementById('ped-contato').value = '';
+  document.getElementById('ped-prazo').value = '';
+  document.getElementById('ped-pagamento').value = '';
+  document.getElementById('ped-condicoes').value = '';
+  renderItensPedido();
+  document.getElementById('modal-pedido').classList.add('aberto');
+  setTimeout(() => document.getElementById('ped-fornecedor').focus(), 80);
+}
+
+function renderItensPedido() {
+  const cont = document.getElementById('ped-itens');
+  cont.innerHTML = `<table class="tabela" style="width:100%;font-size:.82rem;">
+    <thead><tr><th>Material</th><th>Etapa</th><th style="text-align:center;">Qtd</th><th style="text-align:right;">Vlr Unit.</th><th style="text-align:right;">Total</th></tr></thead>
+    <tbody>${itensPedidoAtual.map((it,i) => `
+      <tr>
+        <td>${esc(it.nome)}</td>
+        <td>${esc(it.etapaNome)}</td>
+        <td style="text-align:center;">${it.qtd} ${esc(it.unidade)}</td>
+        <td style="text-align:right;"><input type="number" min="0" step="0.01" value="${it.valorUnit}" style="width:90px;text-align:right;padding:4px 6px;" oninput="atualizarValorItemPedido(${i},this.value)"/></td>
+        <td style="text-align:right;">${formatarMoeda(it.qtd*it.valorUnit)}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+  atualizarValorTotalPedido();
+}
+
+function atualizarValorItemPedido(i, valor) {
+  itensPedidoAtual[i].valorUnit = parseFloat(valor) || 0;
+  const linhas = document.querySelectorAll('#ped-itens tbody tr');
+  if (linhas[i]) linhas[i].children[4].textContent = formatarMoeda(itensPedidoAtual[i].qtd*itensPedidoAtual[i].valorUnit);
+  atualizarValorTotalPedido();
+}
+
+function atualizarValorTotalPedido() {
+  const total = itensPedidoAtual.reduce((s,it) => s + it.qtd*it.valorUnit, 0);
+  document.getElementById('ped-valor-total').textContent = formatarMoeda(total);
+}
+
+function fecharModalPedido() { document.getElementById('modal-pedido').classList.remove('aberto'); }
+
+async function confirmarPedidoCompra() {
+  const fornecedor = document.getElementById('ped-fornecedor').value.trim();
+  if (!fornecedor) { toast('Informe o fornecedor.','aviso'); return; }
+  if (!itensPedidoAtual.length) { toast('Nenhum item no pedido.','aviso'); return; }
+
+  const pedido = {
+    id: uid(),
+    obraId: etapas.find(e => e.id === itensPedidoAtual[0].etapaId)?.obraId || '',
+    fornecedor,
+    contato: document.getElementById('ped-contato').value.trim(),
+    prazoEntrega: document.getElementById('ped-prazo').value || null,
+    formaPagamento: document.getElementById('ped-pagamento').value.trim(),
+    condicoes: document.getElementById('ped-condicoes').value.trim(),
+    status: 'aberto',
+    dataPedido: hoje(),
+    criadoEm: hoje(),
+    itens: itensPedidoAtual.map(it => ({
+      etapaId: it.etapaId, materialId: it.matId, nome: it.nome, etapaNome: it.etapaNome,
+      unidade: it.unidade, qtd: it.qtd, valorUnit: it.valorUnit, valorTotal: it.qtd*it.valorUnit, qtdRecebida: 0,
+    })),
+  };
+  pedido.valorTotal = pedido.itens.reduce((s,i) => s + i.valorTotal, 0);
+
+  itensPedidoAtual.forEach(it => {
+    const e = etapas.find(x => x.id === it.etapaId); if (!e) return;
+    const m = (e.materiais||[]).find(x => x.id === it.matId); if (!m) return;
+    m.pedidoCompra = true;
+    m.pedidoCompraId = pedido.id;
+    m.solicitacaoData = hoje();
+    m.fornecedor = fornecedor;
   });
 
-  if (!rows.length) {
+  pedidosCompra = [...pedidosCompra, pedido];
+  selecaoNecessidade.clear();
+  fecharModalPedido();
+  await Promise.all([ syncEtapas(`Pedido de compra: ${fornecedor}`), syncPedidos(`Pedido de compra: ${fornecedor}`) ]);
+  setTab('pedidos');
+  toast('Pedido de compra gerado!', 'sucesso');
+}
+
+// ── TAB PEDIDOS DE COMPRA ──
+function renderPedidos() {
+  const filt = document.getElementById('filtro-obra').value;
+  const lista = pedidosCompra.filter(p => !filt || p.obraId === filt).slice().reverse();
+
+  if (!lista.length) {
     document.getElementById('conteudo').innerHTML = `<div class="empty-state">
       <div class="icon">🛒</div>
-      <div class="titulo">Nenhuma compra solicitada</div>
-      <div class="desc">Gere pedidos na aba <strong>🧾 Necessidade de Compra</strong> (obras com material incluso) ou no Cronograma → 📦 Materiais de uma etapa, clicando em <strong>🛒 Solicitar compra</strong>.</div>
+      <div class="titulo">Nenhum pedido de compra</div>
+      <div class="desc">Gere pedidos na aba <strong>🧾 Necessidade de Compra</strong>, para obras marcadas como "Material incluso — empresa compra".</div>
     </div>`;
     return;
   }
 
-  rows.sort((a,b) => {
-    const ord = {pendente:0,parcial:1,comprado:2,min_ok:3,entregue:4};
-    return (ord[matStatusCalc(a.m)]??9) - (ord[matStatusCalc(b.m)]??9);
-  });
-
-  // Agrupar por obra
-  const porObra = {};
-  rows.forEach(r => {
-    const k = r.e.obraId;
-    if (!porObra[k]) porObra[k] = [];
-    porObra[k].push(r);
-  });
-
-  let html = '';
-  Object.entries(porObra).forEach(([obraId, items]) => {
-    const obra = obras.find(o => o.id === obraId);
-    html += `<div class="obra-card">
+  document.getElementById('conteudo').innerHTML = lista.map(p => {
+    const obra = obras.find(o => o.id === p.obraId);
+    return `<div class="obra-card">
       <div class="obra-header">
         <div>
-          <div class="obra-header-titulo">🏗️ ${esc(obra?obra.nome:obraId)}</div>
-          ${obra?.cliente?`<div class="obra-header-sub">${esc(obra.cliente)}</div>`:''}
+          <div class="obra-header-titulo">🛒 ${esc(p.fornecedor)}</div>
+          <div class="obra-header-sub">${obra?`🏗️ ${esc(obra.nome)} · `:''}Pedido em ${formatarData(p.dataPedido)}${p.prazoEntrega?` · Prazo: ${formatarData(p.prazoEntrega)}`:''}</div>
         </div>
-        <div class="obra-header-badge">${items.length} pedido(s)</div>
+        <span class="badge ${PedStCor[p.status]||'cinza'}" style="margin-left:auto;">${PedStLbl[p.status]||p.status}</span>
+        <div class="obra-header-badge" style="margin-left:10px;">${formatarMoeda(p.valorTotal||0)}</div>
       </div>
       <div style="padding:12px 18px;">
-        ${items.map(({e, m}) => {
-          const st  = matStatusCalc(m);
-          const min = m.qtdMinIniciar || m.qtdPrevista || 0;
-          const ent = m.qtdEntregue || 0;
-          const pct = min > 0 ? Math.min(100, Math.round(ent / min * 100)) : 0;
+        ${(p.itens||[]).map(it => {
+          const e = etapas.find(x => x.id === it.etapaId);
+          const m = e && (e.materiais||[]).find(x => x.id === it.materialId);
+          const completo = (it.qtdRecebida||0) >= (it.qtd||0);
+          const parcial   = !completo && (it.qtdRecebida||0) > 0;
           return `<div class="mat-card">
             <div class="mat-card-info">
-              <div class="mat-card-nome">${esc(m.nome)}<span class="mat-card-class">${ClassLbl[m.classificacao]||m.classificacao}</span></div>
-              <div class="mat-card-sub">Etapa: <strong>${esc(e.nome)}</strong>${m.fornecedor?` · Fornec.: ${esc(m.fornecedor)}`:''}</div>
+              <div class="mat-card-nome">${esc(it.nome)}</div>
+              <div class="mat-card-sub">Etapa: <strong>${esc(it.etapaNome)}</strong> · ${it.qtd} ${esc(it.unidade)} · ${formatarMoeda(it.valorTotal)} · Recebido: ${it.qtdRecebida||0}/${it.qtd}</div>
             </div>
-            ${min > 0 ? `<div class="prog-wrap no-print">
-              <div class="prog-label">${ent} / ${min} ${esc(m.unidade||'')} entregues</div>
-              <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${progColor(pct)};"></div></div>
-            </div>` : ''}
-            <span class="st-${st}">${MatSLbl[st]||st}</span>
+            <span class="st-${completo?'entregue':parcial?'parcial':'pendente'}">${completo?'Recebido':parcial?'Parcial':'Pendente'}</span>
             <div class="btns-acao">
-              <button class="btn-pill btn-pill-green no-print" onclick='abrirEntrega("${e.id}","${m.id}")'>📥 Registrar entrega</button>
+              ${m ? `<button class="btn-pill btn-pill-green no-print" onclick='abrirEntrega("${it.etapaId}","${it.materialId}")'>📥 Registrar entrega</button>` : ''}
             </div>
           </div>`;
         }).join('')}
+        ${p.condicoes ? `<div style="font-size:.8rem;color:var(--texto-leve);margin-top:8px;">📝 ${esc(p.condicoes)}</div>` : ''}
+        <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+          <button class="btn btn-outline btn-sm no-print" onclick='imprimirPedido("${p.id}")'>🖨️ Imprimir Pedido</button>
+        </div>
       </div>
     </div>`;
-  });
+  }).join('');
+}
 
-  document.getElementById('conteudo').innerHTML = html;
+function imprimirPedido(pedidoId) {
+  const p = pedidosCompra.find(x => x.id === pedidoId); if (!p) return;
+  const obra = obras.find(o => o.id === p.obraId);
+  const corpo = `
+    <table style="margin-bottom:16px;"><tbody>
+      <tr><th style="width:160px;">Fornecedor</th><td>${esc(p.fornecedor)}</td></tr>
+      ${p.contato?`<tr><th>Contato</th><td>${esc(p.contato)}</td></tr>`:''}
+      ${obra?`<tr><th>Obra</th><td>${esc(obra.nome)}</td></tr>`:''}
+      <tr><th>Data do Pedido</th><td>${formatarData(p.dataPedido)}</td></tr>
+      ${p.prazoEntrega?`<tr><th>Prazo de Entrega</th><td>${formatarData(p.prazoEntrega)}</td></tr>`:''}
+      ${p.formaPagamento?`<tr><th>Forma de Pagamento</th><td>${esc(p.formaPagamento)}</td></tr>`:''}
+      ${p.condicoes?`<tr><th>Condições</th><td>${esc(p.condicoes)}</td></tr>`:''}
+    </tbody></table>
+    <table><thead><tr><th>Material</th><th>Etapa</th><th>Qtd</th><th>Vlr Unit.</th><th>Vlr Total</th></tr></thead>
+    <tbody>${(p.itens||[]).map(it=>`<tr>
+      <td>${esc(it.nome)}</td><td>${esc(it.etapaNome)}</td><td>${it.qtd} ${esc(it.unidade)}</td>
+      <td>${formatarMoeda(it.valorUnit)}</td><td>${formatarMoeda(it.valorTotal)}</td>
+    </tr>`).join('')}
+    <tr><td colspan="4" style="text-align:right;font-weight:700;">Valor Total</td><td style="font-weight:700;">${formatarMoeda(p.valorTotal||0)}</td></tr>
+    </tbody></table>`;
+  abrirDocumentoImpressao(`Pedido de Compra — ${esc(p.fornecedor)}`, `Status: ${PedStLbl[p.status]||p.status}`, corpo);
 }
 
 // ── MODAL ENTREGA ──
@@ -562,21 +698,22 @@ async function confirmarEntrega() {
   m.valorComprado= parseFloat(document.getElementById('ent-valcomp').value)||0;
   m.obs          = document.getElementById('ent-obs').value.trim();
   fecharEntrega();
+  const pedidoAtualizado = atualizarPedidoAposEntrega(pedidosCompra, m);
   await syncEtapas(`Entrega: ${m.nome} — ${e.nome}`);
+  if (pedidoAtualizado) await syncPedidos(`Entrega recebida: ${m.nome}`);
   render(); atualizarStats();
   toast(`Entrega registrada: ${m.nome}`, 'sucesso');
 }
 
 function fecharEntrega() { document.getElementById('modal-entrega').classList.remove('aberto'); }
 
-async function solicitarCompra(etapaId, matId) {
-  const e = etapas.find(x => x.id === etapaId); if (!e) return;
-  const m = (e.materiais||[]).find(x => x.id === matId); if (!m) return;
-  m.pedidoCompra    = true;
-  m.solicitacaoData = hoje();
-  await syncEtapas(`Solicitação: ${m.nome}`);
-  render(); atualizarStats();
-  toast(`Compra solicitada: ${m.nome}`, 'sucesso');
+async function syncPedidos(msg) {
+  salvarLocal(LS_PED, pedidosCompra);
+  if (!configurado()) return;
+  try {
+    const cur = await ghGet(PATH_PED);
+    shaPed = await salvarDados(PATH_PED, pedidosCompra, cur?.sha||null, msg);
+  } catch(err) { toast('Erro ao sincronizar pedido: '+err.message,'aviso'); }
 }
 
 async function syncEtapas(msg) {
