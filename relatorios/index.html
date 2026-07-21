@@ -36,6 +36,11 @@
     .detalhe-row:last-child { border-bottom: none; }
     .prog-bar { height: 6px; background: var(--cinza); border-radius: 999px; margin-top: 8px; overflow: hidden; }
     .prog-fill { height: 100%; border-radius: 999px; background: var(--verde); transition: width .5s; }
+    .etapa-linha { display:grid; grid-template-columns:28px 1fr 100px 70px; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--cinza); font-size:.83rem; }
+    .etapa-linha:last-child { border-bottom:none; }
+    .etapa-ord-mini { width:26px; height:26px; border-radius:50%; background:var(--fundo2); border:1px solid var(--cinza); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.72rem; color:var(--texto-leve); flex-shrink:0; }
+    .etapa-prog-mini { height:6px; background:var(--cinza); border-radius:999px; overflow:hidden; margin-top:4px; }
+    .etapa-prog-fill-mini { height:100%; border-radius:999px; transition:width .4s; }
   </style>
 </head>
 <body>
@@ -78,10 +83,25 @@
 <script src="../assets/core.js"></script>
 <script>
 document.getElementById('sidebar-placeholder').innerHTML = buildSidebar('relatorios');
-let obras=[]; let lancamentos=[];
+let obras=[]; let lancamentos=[]; let etapas=[];
+
+const SLbl = {
+  planejada:'Planejada', aguardando_etapa:'Aguard. Etapa',
+  aguardando_material:'Aguard. Material', aguardando_equipe:'Aguard. Equipe',
+  aguardando_equipamento:'Aguard. Equipamento', aguardando_aprovacao:'Aguard. Aprovação',
+  liberada:'Liberada', em_execucao:'Em Execução', pausada:'Pausada',
+  bloqueada:'Bloqueada', concluida:'Concluída', cancelada:'Cancelada'
+};
+const SCor = {
+  planejada:'cinza', aguardando_etapa:'amarelo', aguardando_material:'amarelo',
+  aguardando_equipe:'amarelo', aguardando_equipamento:'amarelo', aguardando_aprovacao:'amarelo',
+  liberada:'azul', em_execucao:'verde', pausada:'amarelo',
+  bloqueada:'vermelho', concluida:'azul', cancelada:'cinza'
+};
+const AGUARDANDO = ['aguardando_etapa','aguardando_material','aguardando_equipe','aguardando_equipamento','aguardando_aprovacao','bloqueada'];
 
 async function init() {
-  obras=carregarLocal('vne_obras')||[]; lancamentos=carregarLocal('vne_lanc')||[];
+  obras=carregarLocal('vne_obras')||[]; lancamentos=carregarLocal('vne_lanc')||[]; etapas=carregarLocal('vne_etapas')||[];
   preencherFiltros(); renderRelatorios();
 
   // Verificar param ?obra=
@@ -92,9 +112,9 @@ async function init() {
   if(!configurado()){ setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rL,rO]=await Promise.all([carregarDados('data/lancamentos.json'),carregarDados('data/obras.json')]);
-    lancamentos=rL.lista; obras=rO.lista;
-    salvarLocal('vne_lanc',lancamentos); salvarLocal('vne_obras',obras);
+    const [rL,rO,rE]=await Promise.all([carregarDados('data/lancamentos.json'),carregarDados('data/obras.json'),carregarDados('data/etapas.json')]);
+    lancamentos=rL.lista; obras=rO.lista; etapas=rE.lista;
+    salvarLocal('vne_lanc',lancamentos); salvarLocal('vne_obras',obras); salvarLocal('vne_etapas',etapas);
     preencherFiltros(); renderRelatorios();
     setSyncStatus('verde','Conectado');
   } catch(e){ setSyncStatus('vermelho','Erro'); }
@@ -131,6 +151,25 @@ function renderObra(o) {
   const contrato = o.valorContrato || 0;
   const percRec = contrato > 0 ? Math.min(100, Math.round(rec.pago/contrato*100)) : null;
 
+  // ── Progresso físico (etapas) ──
+  const etObra  = etapas.filter(e=>e.obraId===o.id).sort((a,b)=>(a.ordem||999)-(b.ordem||999));
+  const pesoTot = etObra.reduce((s,e)=>s+(e.peso||0),0);
+  const fisico  = pesoTot>0
+    ? etObra.reduce((s,e)=>s+((e.peso||0)*(e.percentualExecutado||0)/100),0)/pesoTot*100
+    : (etObra.length ? etObra.reduce((s,e)=>s+(e.percentualExecutado||0),0)/etObra.length : 0);
+  const etConc = etObra.filter(e=>e.status==='concluida').length;
+  const etExec = etObra.filter(e=>e.status==='em_execucao').length;
+  const etBloq = etObra.filter(e=>AGUARDANDO.includes(e.status)).length;
+
+  // ── Materiais ──
+  let matTotal=0, matPendObrig=0, matValorPrev=0, matValorComp=0;
+  etObra.forEach(e=>(e.materiais||[]).forEach(m=>{
+    matTotal++;
+    matValorPrev += m.valorPrevisto||0;
+    matValorComp += m.valorComprado||0;
+    if (m.classificacao==='obrigatorio_iniciar' && (m.qtdEntregue||0) < (m.qtdMinIniciar||m.qtdPrevista||0) && (m.qtdMinIniciar||m.qtdPrevista||0)>0) matPendObrig++;
+  }));
+
   // Por categoria - despesas pagas
   const catDes = {};
   lanc.filter(l=>l.tipo==='despesa').forEach(l=>{
@@ -164,7 +203,8 @@ function renderObra(o) {
       </div>
     </div>
 
-    <!-- KPIs -->
+    <!-- KPIs FINANCEIRO -->
+    <div style="padding:8px 20px 0;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-leve);">💰 Financeiro</div>
     <div class="obra-kpis">
       <div class="kpi-box">
         <div class="kpi-val" style="color:var(--verde);">${formatarMoeda(rec.pago)}</div>
@@ -188,6 +228,65 @@ function renderObra(o) {
         <div class="kpi-rot">Saldo Líquido</div>
       </div>
     </div>
+
+    <!-- KPIs FÍSICO -->
+    <div style="padding:10px 20px 0;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--texto-leve);">🏗️ Andamento Físico</div>
+    <div class="obra-kpis">
+      <div class="kpi-box">
+        <div class="kpi-val" style="color:var(--brand);">${fisico.toFixed(1)}%</div>
+        <div class="kpi-rot">% Físico (ponderado)</div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,fisico)}%;background:var(--brand);"></div></div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-val">${etObra.length}</div>
+        <div class="kpi-rot">Etapas Totais</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-val" style="color:var(--azul);">${etExec}</div>
+        <div class="kpi-rot">Em Execução</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-val" style="color:var(--verde);">${etConc}</div>
+        <div class="kpi-rot">Concluídas</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-val" style="color:${etBloq?'var(--vermelho)':'var(--texto)'};">${etBloq}</div>
+        <div class="kpi-rot">Aguard. / Bloq.</div>
+      </div>
+    </div>
+
+    <!-- PROGRESSO POR ETAPA -->
+    ${etObra.length ? `<div style="padding:14px 18px;border-top:1px solid var(--cinza);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span class="detalhe-titulo" style="margin:0;">📋 Progresso por Etapa</span>
+        <a href="../obras/cronograma/?obra=${o.id}" style="font-size:0.78rem;color:var(--brand);">Ver cronograma →</a>
+      </div>
+      ${etObra.map(e=>{
+        const pct = e.percentualExecutado||0;
+        const cor = e.status==='concluida' ? 'var(--verde)' : e.status==='em_execucao' ? 'var(--brand)' : AGUARDANDO.includes(e.status) ? 'var(--vermelho)' : 'var(--cinza2)';
+        return `<div class="etapa-linha">
+          <div class="etapa-ord-mini">${e.ordem||'—'}</div>
+          <div>
+            <div style="font-weight:600;">${esc(e.nome)}${e.responsavel?` <span style="font-weight:400;color:var(--texto-leve);">· 👤 ${esc(e.responsavel)}</span>`:''}</div>
+            <div class="etapa-prog-mini"><div class="etapa-prog-fill-mini" style="width:${pct}%;background:${cor};"></div></div>
+          </div>
+          <span class="badge ${SCor[e.status]||'cinza'}" style="justify-self:start;">${SLbl[e.status]||e.status}</span>
+          <span style="text-align:right;font-weight:700;">${pct}%</span>
+        </div>`;
+      }).join('')}
+    </div>` : `<div style="padding:14px 18px;border-top:1px solid var(--cinza);color:var(--texto-leve);font-size:0.84rem;">
+      Nenhuma etapa cadastrada nesta obra. <a href="../obras/cronograma/?obra=${o.id}" style="color:var(--brand);">Criar cronograma →</a>
+    </div>`}
+
+    <!-- MATERIAIS -->
+    ${matTotal ? `<div style="padding:10px 18px;border-top:1px solid var(--cinza);display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:.82rem;">
+      <span class="detalhe-titulo" style="margin:0;">📦 Materiais</span>
+      <span>${matTotal} cadastrado(s)</span>
+      <span style="color:${matPendObrig?'var(--vermelho)':'var(--verde)'};font-weight:700;">${matPendObrig} obrigatório(s) pendente(s)</span>
+      ${matValorPrev?`<span>Previsto: <strong>${formatarMoeda(matValorPrev)}</strong></span>`:''}
+      ${matValorComp?`<span>Comprado: <strong>${formatarMoeda(matValorComp)}</strong></span>`:''}
+      <a href="../compras/?obra=${o.id}" style="margin-left:auto;font-size:0.78rem;color:var(--brand);">Ver em Compras →</a>
+    </div>` : ''}
 
     <!-- DETALHAMENTO -->
     <div class="detalhe-grid">

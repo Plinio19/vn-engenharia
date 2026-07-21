@@ -188,9 +188,11 @@ async function init() {
 
 async function recarregar() { init(); }
 
+const OBRA_PARAM = new URLSearchParams(location.search).get('obra');
+
 function popularFiltroObra() {
   const sel = document.getElementById('filtro-obra');
-  const val = sel.value;
+  const val = sel.value || OBRA_PARAM || '';
   const ids = [...new Set(etapas.map(e => e.obraId))];
   sel.innerHTML = '<option value="">Todas as Obras</option>' +
     ids.map(id => {
