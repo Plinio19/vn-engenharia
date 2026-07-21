@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "id": "mrtyidfs0ld20",
+    "obraId": "mrtxfbywanpo6",
+    "nome": "TESTE ETAPA",
+    "codigo": "",
+    "ordem": 1,
+    "categoria": "fundacao",
+    "responsavel": "vitor",
+    "descricao": "",
+    "observacoes": "",
+    "status": "planejada",
+    "peso": 10,
+    "percentualExecutado": 0,
+    "dataPrevistoInicio": "2026-07-20",
+    "dataPrevistoFim": "2026-07-22",
+    "dataRealInicio": null,
+    "dataRealFim": null,
+    "dependencias": [],
+    "checklist": [],
+    "materiais": [],
+    "criadoEm": "2026-07-21"
+  }
+]
