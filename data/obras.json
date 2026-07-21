@@ -12,5 +12,19 @@
     "materialPorConta": "empresa",
     "obs": "",
     "criadoEm": "2026-07-21"
+  },
+  {
+    "id": "mrtyoqm7rs4qy",
+    "nome": "MATERIAL CONTA CLIENTE",
+    "cliente": "INBOX",
+    "endereco": "",
+    "status": "ativa",
+    "valorContrato": 0,
+    "valorMaoDeObra": 0,
+    "dataInicio": null,
+    "previsaoConclusao": null,
+    "materialPorConta": "cliente",
+    "obs": "",
+    "criadoEm": "2026-07-21"
   }
 ]
