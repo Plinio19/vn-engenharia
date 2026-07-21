@@ -263,3 +263,22 @@ mark.pesquisa-destaque { background: #fef08a; color: inherit; border-radius: 2px
   .sidebar { transform: translateX(-100%); }
   .main { margin-left: 0; }
 }
+
+/* ── TELAS GRANDES ──
+   A maioria do texto usa rem, então aumentar a fonte base do <html> escala
+   tudo proporcionalmente (títulos, tabelas, botões, badges), sem depender
+   de zoom manual do navegador. */
+@media (min-width: 1600px) {
+  html, body { font-size: 15px; }
+  .page { max-width: 1600px; }
+}
+@media (min-width: 1920px) {
+  html, body { font-size: 16px; }
+  .page { max-width: 1800px; }
+  :root { --sidebar-w: 250px; --topbar-h: 64px; }
+}
+@media (min-width: 2560px) {
+  html, body { font-size: 18px; }
+  .page { max-width: 2100px; }
+  :root { --sidebar-w: 270px; --topbar-h: 68px; }
+}
