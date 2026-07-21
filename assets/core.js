@@ -207,7 +207,7 @@ function _basePath() {
 const MODULOS = [
   { id: 'dashboard',        label: 'Dashboard',          icone: '📊', href: '/index.html' },
   { grupo: 'Cadastros' },
-  { id: 'cadastros',        label: 'Sócios & Clientes',  icone: '👥', href: '/cadastros/' },
+  { id: 'cadastros',        label: 'Cadastro Geral',  icone: '👥', href: '/cadastros/' },
   { id: 'obras',            label: 'Obras',              icone: '🏗️', href: '/obras/' },
   { id: 'compras',          label: 'Compras de Obra',    icone: '🛒', href: '/compras/' },
   { grupo: 'Financeiro' },
