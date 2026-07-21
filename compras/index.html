@@ -96,6 +96,7 @@
         <button class="chip" id="tab-necessidade" onclick="setTab('necessidade')">🧾 Necessidade de Compra</button>
         <button class="chip" id="tab-pedidos" onclick="setTab('pedidos')">🛒 Pedidos de Compra</button>
         <div style="flex:1;"></div>
+        <button class="btn btn-outline btn-sm no-print" id="btn-exportar-mat-topo" style="display:none;" onclick="exportarNecessidadeObra(document.getElementById('filtro-obra').value)">📤 Exportar Material</button>
         <select id="filtro-obra" class="form-control" style="width:220px;" onchange="render()">
           <option value="">Todas as Obras</option>
         </select>
@@ -263,10 +264,17 @@ function setTab(t) {
 
 function render() {
   atualizarStats();
+  atualizarBotaoExportarTopo();
   if (tab === 'pendentes') renderPendentes();
   else if (tab === 'todos') renderTodos();
   else if (tab === 'necessidade') renderNecessidade();
   else renderPedidos();
+}
+
+function atualizarBotaoExportarTopo() {
+  const obraId = document.getElementById('filtro-obra').value;
+  const obra = obras.find(o => o.id === obraId);
+  document.getElementById('btn-exportar-mat-topo').style.display = (obra && obra.materialPorConta !== 'empresa') ? '' : 'none';
 }
 
 // ── Helpers visuais ──
