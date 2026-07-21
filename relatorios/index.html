@@ -141,7 +141,9 @@ function renderRelatorios() {
   cont.innerHTML = obrasFilt.map(o => renderObra(o)).join('');
 }
 
-function renderObra(o) {
+const StLbl = {ativa:'Ativa',concluida:'Concluída',paralisada:'Paralisada'};
+
+function calcularDadosObra(o) {
   const lanc = lancamentos.filter(l=>l.obraId===o.id);
   const rec  = { pago: lanc.filter(l=>l.tipo==='receita'&&l.status==='pago').reduce((s,l)=>s+(l.valor||0),0),
                   pend: lanc.filter(l=>l.tipo==='receita'&&l.status==='pendente').reduce((s,l)=>s+(l.valor||0),0) };
@@ -151,7 +153,6 @@ function renderObra(o) {
   const contrato = o.valorContrato || 0;
   const percRec = contrato > 0 ? Math.min(100, Math.round(rec.pago/contrato*100)) : null;
 
-  // ── Progresso físico (etapas) ──
   const etObra  = etapas.filter(e=>e.obraId===o.id).sort((a,b)=>(a.ordem||999)-(b.ordem||999));
   const pesoTot = etObra.reduce((s,e)=>s+(e.peso||0),0);
   const fisico  = pesoTot>0
@@ -161,7 +162,6 @@ function renderObra(o) {
   const etExec = etObra.filter(e=>e.status==='em_execucao').length;
   const etBloq = etObra.filter(e=>AGUARDANDO.includes(e.status)).length;
 
-  // ── Materiais ──
   let matTotal=0, matPendObrig=0, matValorPrev=0, matValorComp=0;
   etObra.forEach(e=>(e.materiais||[]).forEach(m=>{
     matTotal++;
@@ -170,7 +170,6 @@ function renderObra(o) {
     if (m.classificacao==='obrigatorio_iniciar' && (m.qtdEntregue||0) < (m.qtdMinIniciar||m.qtdPrevista||0) && (m.qtdMinIniciar||m.qtdPrevista||0)>0) matPendObrig++;
   }));
 
-  // Por categoria - despesas pagas
   const catDes = {};
   lanc.filter(l=>l.tipo==='despesa').forEach(l=>{
     const k=l.categoria||'outros';
@@ -179,7 +178,6 @@ function renderObra(o) {
     else if(l.status==='pendente') catDes[k].pend+=l.valor||0;
   });
 
-  // Receitas por categoria
   const catRec = {};
   lanc.filter(l=>l.tipo==='receita').forEach(l=>{
     const k=l.categoria||'outros-rec';
@@ -188,7 +186,11 @@ function renderObra(o) {
     else if(l.status==='pendente') catRec[k].pend+=l.valor||0;
   });
 
-  const stLbl={ativa:'Ativa',concluida:'Concluída',paralisada:'Paralisada'};
+  return { lanc, rec, des, saldo, contrato, percRec, etObra, fisico, etConc, etExec, etBloq, matTotal, matPendObrig, matValorPrev, matValorComp, catDes, catRec };
+}
+
+function renderObra(o) {
+  const { lanc, rec, des, saldo, contrato, percRec, etObra, fisico, etConc, etExec, etBloq, matTotal, matPendObrig, matValorPrev, matValorComp, catDes, catRec } = calcularDadosObra(o);
   const stCor={ativa:'verde',concluida:'azul',paralisada:'amarelo'};
 
   return `<div class="obra-card">
@@ -199,8 +201,13 @@ function renderObra(o) {
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         ${contrato?`<div style="text-align:right;"><div style="font-size:0.75rem;color:rgba(255,255,255,.5);">Contrato</div><div style="font-weight:700;color:var(--brand);">${formatarMoeda(contrato)}</div></div>`:''}
-        <span class="badge ${stCor[o.status]||'cinza'}">${stLbl[o.status]||o.status}</span>
+        <span class="badge ${stCor[o.status]||'cinza'}">${StLbl[o.status]||o.status}</span>
       </div>
+    </div>
+
+    <div class="no-print" style="padding:10px 20px;border-bottom:1px solid var(--cinza);display:flex;gap:8px;justify-content:flex-end;background:var(--fundo2);">
+      <button class="btn btn-outline btn-sm" onclick='exportarRelatorioCliente("${o.id}")'>📄 Relatório para o Cliente</button>
+      <button class="btn btn-outline btn-sm" onclick='exportarRelatorioInterno("${o.id}")'>🔒 Relatório Interno</button>
     </div>
 
     <!-- KPIs FINANCEIRO -->
@@ -339,6 +346,127 @@ function renderObra(o) {
       : '<div style="color:var(--texto-leve);font-size:0.83rem;">Nenhum lançamento nesta obra.</div>'}
     </div>
   </div>`;
+}
+
+// ── RELATÓRIO INTERNO (completo, com custos e mão de obra — não enviar ao cliente) ──
+function exportarRelatorioInterno(obraId) {
+  const o = obras.find(x=>x.id===obraId); if (!o) return;
+  const d = calcularDadosObra(o);
+  toast('Gerando relatório interno — não deve ser enviado ao cliente.', 'aviso');
+
+  const corpo = `
+    <div style="background:#FEF2F2;border:2px solid #EF4444;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-weight:700;color:#991B1B;">
+      ⚠️ RELATÓRIO INTERNO — contém custos, mão de obra e margens da obra. NÃO deve ser apresentado, impresso ou enviado ao cliente.
+    </div>
+    <table style="margin-bottom:16px;"><tbody>
+      <tr><th style="width:200px;">Obra</th><td>${esc(o.nome)}</td></tr>
+      <tr><th>Cliente</th><td>${esc(o.cliente||'—')}</td></tr>
+      <tr><th>Status</th><td>${StLbl[o.status]||o.status}</td></tr>
+      <tr><th>Endereço</th><td>${esc(o.endereco||'—')}</td></tr>
+      <tr><th>Valor do Contrato</th><td>${formatarMoeda(d.contrato)}</td></tr>
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">💰 Financeiro</h3>
+    <table><tbody>
+      <tr><th style="width:200px;">Recebido</th><td>${formatarMoeda(d.rec.pago)}${d.percRec!==null?` (${d.percRec}% do contrato)`:''}</td></tr>
+      <tr><th>A Receber</th><td>${formatarMoeda(d.rec.pend)}</td></tr>
+      <tr><th>Total Pago (despesas)</th><td>${formatarMoeda(d.des.pago)}</td></tr>
+      <tr><th>A Pagar (despesas)</th><td>${formatarMoeda(d.des.pend)}</td></tr>
+      <tr><th>Saldo Líquido</th><td>${formatarMoeda(d.saldo)}</td></tr>
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">💸 Despesas por Categoria (inclui Mão de Obra)</h3>
+    <table><thead><tr><th>Categoria</th><th>Pago</th><th>Pendente</th></tr></thead><tbody>
+    ${Object.keys(d.catDes).length ? Object.entries(d.catDes).sort((a,b)=>(b[1].pago+b[1].pend)-(a[1].pago+a[1].pend)).map(([k,v])=>`<tr><td>${labelCategoria('despesa',k)}</td><td>${formatarMoeda(v.pago)}</td><td>${formatarMoeda(v.pend)}</td></tr>`).join('') : '<tr><td colspan="3">Sem despesas registradas.</td></tr>'}
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">💰 Receitas por Categoria</h3>
+    <table><thead><tr><th>Categoria</th><th>Pago</th><th>Pendente</th></tr></thead><tbody>
+    ${Object.keys(d.catRec).length ? Object.entries(d.catRec).sort((a,b)=>(b[1].pago+b[1].pend)-(a[1].pago+a[1].pend)).map(([k,v])=>`<tr><td>${labelCategoria('receita',k)}</td><td>${formatarMoeda(v.pago)}</td><td>${formatarMoeda(v.pend)}</td></tr>`).join('') : '<tr><td colspan="3">Sem receitas registradas.</td></tr>'}
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">🏗️ Andamento Físico</h3>
+    <table><tbody>
+      <tr><th style="width:200px;">% Físico (ponderado)</th><td>${d.fisico.toFixed(1)}%</td></tr>
+      <tr><th>Etapas Totais</th><td>${d.etObra.length}</td></tr>
+      <tr><th>Em Execução</th><td>${d.etExec}</td></tr>
+      <tr><th>Concluídas</th><td>${d.etConc}</td></tr>
+      <tr><th>Aguardando / Bloqueadas</th><td>${d.etBloq}</td></tr>
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">📋 Progresso por Etapa</h3>
+    <table><thead><tr><th>Etapa</th><th>Status</th><th>% Executado</th><th>Responsável</th></tr></thead><tbody>
+    ${d.etObra.length ? d.etObra.map(e=>`<tr><td>${esc(e.nome)}</td><td>${SLbl[e.status]||e.status}</td><td>${e.percentualExecutado||0}%</td><td>${esc(e.responsavel||'—')}</td></tr>`).join('') : '<tr><td colspan="4">Nenhuma etapa cadastrada.</td></tr>'}
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">📦 Materiais</h3>
+    <table><tbody>
+      <tr><th style="width:200px;">Total Cadastrado</th><td>${d.matTotal}</td></tr>
+      <tr><th>Obrigatórios Pendentes</th><td>${d.matPendObrig}</td></tr>
+      <tr><th>Valor Previsto</th><td>${formatarMoeda(d.matValorPrev)}</td></tr>
+      <tr><th>Valor Comprado</th><td>${formatarMoeda(d.matValorComp)}</td></tr>
+    </tbody></table>
+  `;
+  abrirDocumentoImpressao(`🔒 Relatório Interno — ${esc(o.nome)}`, `Cliente: ${esc(o.cliente||'—')} · Uso interno — não distribuir`, corpo);
+}
+
+// ── RELATÓRIO PARA O CLIENTE (sem custos internos, sem mão de obra) ──
+function exportarRelatorioCliente(obraId) {
+  const o = obras.find(x=>x.id===obraId); if (!o) return;
+  const d = calcularDadosObra(o);
+
+  const concluidas = d.etObra.filter(e=>e.status==='concluida');
+  const faltantes  = d.etObra.filter(e=>e.status!=='concluida');
+  const saldoReceber = Math.max(d.contrato - d.rec.pago, 0);
+
+  const alertasMaterial = [];
+  d.etObra.forEach(e=>(e.materiais||[]).forEach(m=>{
+    const min = m.qtdMinIniciar||m.qtdPrevista||0;
+    const falta = min - (m.qtdEntregue||0);
+    if (m.classificacao==='obrigatorio_iniciar' && min>0 && falta>0) {
+      alertasMaterial.push({ etapa: e.nome, material: m.nome, unidade: m.unidade, falta });
+    }
+  }));
+
+  const corpo = `
+    <table style="margin-bottom:20px;"><tbody>
+      <tr><th style="width:200px;">Obra</th><td>${esc(o.nome)}</td></tr>
+      <tr><th>Cliente</th><td>${esc(o.cliente||'—')}</td></tr>
+      <tr><th>Endereço</th><td>${esc(o.endereco||'—')}</td></tr>
+      ${o.dataInicio?`<tr><th>Início</th><td>${formatarData(o.dataInicio)}</td></tr>`:''}
+      ${o.previsaoConclusao?`<tr><th>Previsão de Conclusão</th><td>${formatarData(o.previsaoConclusao)}</td></tr>`:''}
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">🏗️ Andamento da Obra</h3>
+    <table><tbody>
+      <tr><th style="width:220px;">Progresso Físico</th><td><strong>${d.fisico.toFixed(0)}%</strong> concluído</td></tr>
+      <tr><th>Etapas Concluídas</th><td>${d.etConc} de ${d.etObra.length}</td></tr>
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">✅ Etapas Concluídas</h3>
+    <table><thead><tr><th>Etapa</th><th>Conclusão</th></tr></thead><tbody>
+    ${concluidas.length ? concluidas.map(e=>`<tr><td>${esc(e.nome)}</td><td>${e.dataRealFim?formatarData(e.dataRealFim):'—'}</td></tr>`).join('') : '<tr><td colspan="2">Nenhuma etapa concluída ainda.</td></tr>'}
+    </tbody></table>
+
+    <h3 style="margin:18px 0 8px;">🔧 Etapas em Andamento / Faltantes</h3>
+    <table><thead><tr><th>Etapa</th><th>Status</th><th>% Executado</th></tr></thead><tbody>
+    ${faltantes.length ? faltantes.map(e=>`<tr><td>${esc(e.nome)}</td><td>${SLbl[e.status]||e.status}</td><td>${e.percentualExecutado||0}%</td></tr>`).join('') : '<tr><td colspan="3">Todas as etapas concluídas.</td></tr>'}
+    </tbody></table>
+
+    ${alertasMaterial.length ? `<h3 style="margin:18px 0 8px;">⚠️ Materiais Aguardando Entrega</h3>
+    <table><thead><tr><th>Etapa</th><th>Material</th><th>Quantidade Faltante</th></tr></thead><tbody>
+      ${alertasMaterial.map(a=>`<tr><td>${esc(a.etapa)}</td><td>${esc(a.material)}</td><td>${a.falta} ${esc(a.unidade||'')}</td></tr>`).join('')}
+    </tbody></table>` : ''}
+
+    <h3 style="margin:18px 0 8px;">💰 Resumo Financeiro</h3>
+    <table><tbody>
+      <tr><th style="width:220px;">Valor do Contrato</th><td>${formatarMoeda(d.contrato)}</td></tr>
+      <tr><th>Total já Recebido</th><td>${formatarMoeda(d.rec.pago)}</td></tr>
+      <tr><th>Saldo a Receber</th><td>${formatarMoeda(saldoReceber)}</td></tr>
+      ${d.percRec!==null?`<tr><th>% do Contrato Pago</th><td>${d.percRec}%</td></tr>`:''}
+    </tbody></table>
+  `;
+  abrirDocumentoImpressao(`Relatório da Obra — ${esc(o.nome)}`, `${o.cliente?('Cliente: '+esc(o.cliente)+' · '):''}Gerado em ${new Date().toLocaleDateString('pt-BR')}`, corpo);
 }
 
 init();
