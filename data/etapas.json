@@ -18,7 +18,26 @@
     "dataRealFim": null,
     "dependencias": [],
     "checklist": [],
-    "materiais": [],
+    "materiais": [
+      {
+        "id": "mrtyiwkwy6hcu",
+        "nome": "CIMENTO",
+        "unidade": "SC",
+        "classificacao": "obrigatorio_iniciar",
+        "qtdPrevista": 1,
+        "qtdMinIniciar": 0,
+        "qtdComprada": 0,
+        "qtdEntregue": 0,
+        "qtdReservada": 0,
+        "qtdUtilizada": 0,
+        "fornecedor": "",
+        "valorPrevisto": 0,
+        "valorComprado": 0,
+        "pedidoCompra": false,
+        "solicitacaoData": null,
+        "obs": ""
+      }
+    ],
     "criadoEm": "2026-07-21"
   }
 ]
