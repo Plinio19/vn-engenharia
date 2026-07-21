@@ -63,6 +63,22 @@
       </div>
     </div>
 
+    <!-- ── MATERIAIS (CATÁLOGO) ── -->
+    <div style="grid-column:1/-1;">
+      <div class="card">
+        <div class="card-header">
+          <h2>📦 Materiais (Catálogo)</h2>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalMaterial()">+ Novo Material</button>
+        </div>
+        <div class="card-body">
+          <p class="hint" style="margin-bottom:10px;">Cadastre aqui os materiais usados com frequência — no Cronograma, ao adicionar material a uma etapa, você poderá selecionar direto desse catálogo em vez de digitar.</p>
+          <div id="lista-materiais">
+            <div style="text-align:center;padding:24px;color:var(--texto-leve);">Carregando...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -140,6 +156,30 @@
   </div>
 </div>
 
+<!-- MODAL MATERIAL (CATÁLOGO) -->
+<div class="overlay" id="modal-material">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 id="mmat-titulo">Novo Material</h2>
+      <button class="btn-fechar" onclick="fecharModal('modal-material')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="mmat-id"/>
+      <div class="form-campo"><label>Nome *</label><input id="mmat-nome" type="text" placeholder="Ex: Cimento CP-II"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-campo"><label>Unidade padrão</label><input id="mmat-unid" type="text" placeholder="sc, m³, un..."/></div>
+        <div class="form-campo"><label>Categoria</label><input id="mmat-cat" type="text" placeholder="Ex: Estrutura, Elétrico..."/></div>
+      </div>
+      <div class="form-campo"><label>Valor de Referência (R$)</label><input id="mmat-valor" type="number" min="0" step="0.01" placeholder="0,00"/></div>
+      <div class="form-campo"><label>Observações</label><textarea id="mmat-obs" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('modal-material')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarMaterial()">✓ Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 <script src="../assets/core.js"></script>
 <script>
@@ -148,28 +188,33 @@ document.getElementById('sidebar-placeholder').innerHTML = buildSidebar('cadastr
 let socios      = []; let shaS = null;
 let clientes    = []; let shaC = null;
 let prestadores = []; let shaP = null;
+let materiaisCat = []; let shaM = null;
 
 async function init() {
   socios      = carregarLocal('vne_socios')      || [];
   clientes    = carregarLocal('vne_clientes')    || [];
   prestadores = carregarLocal('vne_prestadores') || [];
-  renderSocios(); renderClientes(); renderPrestadores();
+  materiaisCat= carregarLocal('vne_materiais_catalogo') || [];
+  renderSocios(); renderClientes(); renderPrestadores(); renderMateriais();
 
   if (!configurado()) { setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rS, rC, rP] = await Promise.all([
+    const [rS, rC, rP, rM] = await Promise.all([
       carregarDados('data/socios.json'),
       carregarDados('data/clientes.json'),
       carregarDados('data/prestadores.json'),
+      carregarDados('data/materiais_catalogo.json'),
     ]);
     socios      = rS.lista; shaS = rS.sha;
     clientes    = rC.lista; shaC = rC.sha;
     prestadores = rP.lista; shaP = rP.sha;
+    materiaisCat= rM.lista; shaM = rM.sha;
     salvarLocal('vne_socios',      socios);
     salvarLocal('vne_clientes',    clientes);
     salvarLocal('vne_prestadores', prestadores);
-    renderSocios(); renderClientes(); renderPrestadores();
+    salvarLocal('vne_materiais_catalogo', materiaisCat);
+    renderSocios(); renderClientes(); renderPrestadores(); renderMateriais();
     setSyncStatus('verde','Conectado');
   } catch(e) { setSyncStatus('vermelho','Erro'); }
 }
@@ -363,6 +408,69 @@ async function excluirPrestador(id) {
   prestadores = prestadores.filter(x=>x.id!==id);
   salvarLocal('vne_prestadores', prestadores); renderPrestadores();
   if (configurado()) try { shaP = await salvarDados('data/prestadores.json', prestadores, shaP, 'Excluir prestador'); } catch(e) {}
+}
+
+// ── RENDER MATERIAIS (CATÁLOGO) ──
+function renderMateriais() {
+  const cont = document.getElementById('lista-materiais');
+  if (!materiaisCat.length) {
+    cont.innerHTML = `<div style="text-align:center;padding:24px;color:var(--texto-leve);">Nenhum material cadastrado.</div>`;
+    return;
+  }
+  cont.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0;">` +
+    materiaisCat.map(m => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 8px;border-bottom:1px solid var(--cinza);">
+        <div>
+          <div style="font-weight:700;">${esc(m.nome)}</div>
+          <div style="font-size:.78rem;color:var(--texto-leve);">
+            ${m.unidade ? `Un.: ${esc(m.unidade)}` : ''}
+            ${m.categoria ? ` · ${esc(m.categoria)}` : ''}
+            ${m.valorReferencia ? ` · ${formatarMoeda(m.valorReferencia)}` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-outline btn-sm" onclick='editarMaterial("${m.id}")'>✏️</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--vermelho);" onclick='excluirMaterial("${m.id}")'>🗑</button>
+        </div>
+      </div>`).join('') + `</div>`;
+}
+
+function abrirModalMaterial(m) {
+  document.getElementById('mmat-titulo').textContent = m ? 'Editar Material' : 'Novo Material';
+  document.getElementById('mmat-id').value    = m?.id              || '';
+  document.getElementById('mmat-nome').value  = m?.nome            || '';
+  document.getElementById('mmat-unid').value  = m?.unidade         || '';
+  document.getElementById('mmat-cat').value   = m?.categoria       || '';
+  document.getElementById('mmat-valor').value = m?.valorReferencia || '';
+  document.getElementById('mmat-obs').value   = m?.obs             || '';
+  document.getElementById('modal-material').classList.add('aberto');
+}
+
+function editarMaterial(id) { abrirModalMaterial(materiaisCat.find(x=>x.id===id)); }
+
+async function salvarMaterial() {
+  const nome = document.getElementById('mmat-nome').value.trim();
+  if (!nome) { toast('Informe o nome.','aviso'); return; }
+  const id = document.getElementById('mmat-id').value || uid();
+  const obj = {
+    id, nome,
+    unidade:         document.getElementById('mmat-unid').value.trim(),
+    categoria:       document.getElementById('mmat-cat').value.trim(),
+    valorReferencia: parseFloat(document.getElementById('mmat-valor').value)||0,
+    obs:             document.getElementById('mmat-obs').value.trim(),
+    criadoEm: hoje(),
+  };
+  materiaisCat = materiaisCat.filter(x=>x.id!==id); materiaisCat.push(obj);
+  salvarLocal('vne_materiais_catalogo', materiaisCat); renderMateriais(); fecharModal('modal-material');
+  toast('Material salvo!','sucesso');
+  if (configurado()) try { shaM = await salvarDados('data/materiais_catalogo.json', materiaisCat, shaM, `Material: ${nome}`); } catch(e) { toast('Erro sync','aviso'); }
+}
+
+async function excluirMaterial(id) {
+  if (!confirm('Excluir material do catálogo?')) return;
+  materiaisCat = materiaisCat.filter(x=>x.id!==id);
+  salvarLocal('vne_materiais_catalogo', materiaisCat); renderMateriais();
+  if (configurado()) try { shaM = await salvarDados('data/materiais_catalogo.json', materiaisCat, shaM, 'Excluir material'); } catch(e) {}
 }
 
 document.querySelectorAll('.overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) m.classList.remove('aberto'); }));

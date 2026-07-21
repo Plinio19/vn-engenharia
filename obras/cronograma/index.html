@@ -71,7 +71,7 @@
       </div>
       <button class="btn btn-outline btn-sm no-print" onclick="init()" title="Buscar a versão mais recente do GitHub agora">🔄 Sincronizar agora</button>
       <a href="../" class="btn btn-outline btn-sm">← Obras</a>
-      <button class="btn btn-primary" onclick="abrirModalEtapa()">+ Nova Etapa</button>
+      <button class="btn btn-primary" onclick="iniciarAssistenteEtapa()">+ Nova Etapa</button>
     </div>
   </div>
   <div class="page">
@@ -109,6 +109,7 @@
       <button class="btn-fechar" onclick="fecharModalEtapa()">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding:0 20px 4px;">
+      <div id="wiz-progress-etapa" style="display:none;font-size:.78rem;font-weight:700;color:var(--brand);">Passo 1 de 3 — Dados da Etapa</div>
 
       <div style="display:grid;grid-template-columns:1fr 100px 90px;gap:12px;">
         <div class="form-campo"><label>Nome da Etapa *</label><input type="text" id="e-nome" placeholder="Ex: Fundação"/></div>
@@ -173,7 +174,8 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharModalEtapa()">Cancelar</button>
-      <button class="btn btn-success" onclick="salvarEtapa()">✓ Salvar Etapa</button>
+      <button class="btn btn-success" id="be-salvar" onclick="salvarEtapa()">✓ Salvar Etapa</button>
+      <button class="btn btn-primary" id="be-seguinte" style="display:none;" onclick="salvarEtapa()">Seguinte: Checklist →</button>
     </div>
   </div>
 </div>
@@ -186,6 +188,7 @@
       <button class="btn-fechar" onclick="fecharChecklist()">✕</button>
     </div>
     <div class="modal-body" style="padding:0 20px 8px;">
+      <div id="wiz-progress-cl" style="display:none;font-size:.78rem;font-weight:700;color:var(--brand);margin-bottom:10px;">Passo 2 de 3 — Checklist (opcional)</div>
       <div id="cl-body"></div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--cinza);">
         <div style="font-weight:700;font-size:.85rem;margin-bottom:10px;color:var(--texto-leve);">ADICIONAR TAREFA</div>
@@ -203,8 +206,10 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="fecharChecklist()">Fechar</button>
-      <button class="btn btn-success" onclick="salvarChecklist()">✓ Salvar</button>
+      <button class="btn btn-outline" id="bc-fechar" onclick="fecharChecklist()">Fechar</button>
+      <button class="btn btn-success" id="bc-salvar" onclick="salvarChecklist()">✓ Salvar</button>
+      <button class="btn btn-outline" id="bc-voltar" style="display:none;" onclick="voltarParaEtapa()">← Voltar</button>
+      <button class="btn btn-primary" id="bc-seguinte" style="display:none;" onclick="seguirParaMateriais()">Seguinte: Materiais →</button>
     </div>
   </div>
 </div>
@@ -217,13 +222,14 @@
       <button class="btn-fechar" onclick="fecharMateriais()">✕</button>
     </div>
     <div class="modal-body" style="padding:0 20px 8px;">
+      <div id="wiz-progress-mat" style="display:none;font-size:.78rem;font-weight:700;color:var(--brand);margin-bottom:10px;">Passo 3 de 3 — Materiais (opcional)</div>
       <div id="mat-summary" class="stats-grid" style="margin-bottom:14px;"></div>
       <div id="mat-alert"></div>
       <div id="mat-body"></div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--cinza);">
         <div style="font-weight:700;font-size:.85rem;margin-bottom:10px;color:var(--texto-leve);">ADICIONAR MATERIAL</div>
         <div style="display:grid;grid-template-columns:1fr 70px 180px 80px 90px 130px 100px auto;gap:8px;align-items:end;">
-          <div class="form-campo" style="margin:0"><label style="font-size:.72rem;">Material *</label><input type="text" id="mn-nome" placeholder="Cimento CP-II" onkeydown="if(event.key==='Enter')addMat()"/></div>
+          <div class="form-campo" style="margin:0"><label style="font-size:.72rem;">Material *</label><input type="text" id="mn-nome" list="lista-catalogo-mat" placeholder="Cimento CP-II" onchange="preencherPorCatalogo()" onkeydown="if(event.key==='Enter')addMat()"/><datalist id="lista-catalogo-mat"></datalist></div>
           <div class="form-campo" style="margin:0"><label style="font-size:.72rem;">Unidade</label><input type="text" id="mn-unid" placeholder="sc"/></div>
           <div class="form-campo" style="margin:0"><label style="font-size:.72rem;">Classificação</label>
             <select id="mn-class" style="font-size:.78rem;padding:5px 6px;">
@@ -242,8 +248,10 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="fecharMateriais()">Cancelar</button>
-      <button class="btn btn-success" onclick="salvarMateriais()">✓ Salvar Materiais</button>
+      <button class="btn btn-outline" id="bm-cancelar" onclick="fecharMateriais()">Cancelar</button>
+      <button class="btn btn-success" id="bm-salvar" onclick="salvarMateriais()">✓ Salvar Materiais</button>
+      <button class="btn btn-outline" id="bm-voltar" style="display:none;" onclick="voltarParaChecklist()">← Voltar</button>
+      <button class="btn btn-primary" id="bm-concluir" style="display:none;" onclick="concluirAssistente()">✓ Concluir</button>
     </div>
   </div>
 </div>
@@ -303,28 +311,47 @@ const CLbl = {
 const AGUARDANDO = ['aguardando_etapa','aguardando_material','aguardando_equipe','aguardando_equipamento','aguardando_aprovacao','bloqueada'];
 
 // ── INIT ──
+let catalogoMat = [];
+
 async function init() {
   if (!OBRA_ID) { document.getElementById('lista-etapas').innerHTML = '<div style="text-align:center;padding:48px;color:var(--vermelho);">Obra não especificada.</div>'; return; }
 
   const cache = carregarLocal(LS_ET) || [];
   etapas = cache.filter(e => e.obraId === OBRA_ID);
   obra   = (carregarLocal(LS_OB) || []).find(o => o.id === OBRA_ID);
+  catalogoMat = carregarLocal('vne_materiais_catalogo') || [];
+  renderCatalogoDatalist();
   atualizarHeader(); renderEtapas(); atualizarStats();
 
   if (!configurado()) { setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rE, rO] = await Promise.all([carregarDados(PATH_ET), carregarDados('data/obras.json')]);
+    const [rE, rO, rM] = await Promise.all([carregarDados(PATH_ET), carregarDados('data/obras.json'), carregarDados('data/materiais_catalogo.json')]);
     const todas = rE.lista; shaEt = rE.sha;
     salvarLocal(LS_ET, todas);
     etapas = todas.filter(e => e.obraId === OBRA_ID);
     salvarLocal(LS_OB, rO.lista);
     obra = rO.lista.find(o => o.id === OBRA_ID);
+    catalogoMat = rM.lista;
+    salvarLocal('vne_materiais_catalogo', catalogoMat);
+    renderCatalogoDatalist();
     atualizarHeader(); renderEtapas(); atualizarStats();
     setSyncStatus('verde','Conectado');
   } catch(err) {
     setSyncStatus('vermelho','Erro'); toast('Usando cache local.','aviso');
   }
+}
+
+function renderCatalogoDatalist() {
+  const dl = document.getElementById('lista-catalogo-mat');
+  if (!dl) return;
+  dl.innerHTML = catalogoMat.map(m => `<option value="${esc(m.nome)}"></option>`).join('');
+}
+
+function preencherPorCatalogo() {
+  const nome = document.getElementById('mn-nome').value.trim();
+  const item = catalogoMat.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+  if (item && !document.getElementById('mn-unid').value) document.getElementById('mn-unid').value = item.unidade || '';
 }
 
 function atualizarHeader() {
@@ -532,6 +559,19 @@ async function mudarStatus(id, novo) {
 }
 
 // ── MODAL ETAPA ──
+let modoAssistente = false;
+
+function iniciarAssistenteEtapa() {
+  modoAssistente = true;
+  abrirModalEtapa();
+}
+
+function aplicarModoAssistenteEtapa() {
+  document.getElementById('wiz-progress-etapa').style.display = modoAssistente ? 'block' : 'none';
+  document.getElementById('be-salvar').style.display   = modoAssistente ? 'none' : '';
+  document.getElementById('be-seguinte').style.display = modoAssistente ? '' : 'none';
+}
+
 function abrirModalEtapa() {
   idEdit = null;
   document.getElementById('me-titulo').textContent = 'Nova Etapa';
@@ -543,6 +583,7 @@ function abrirModalEtapa() {
   document.getElementById('e-perc').value  = '0';
   ['e-pi','e-pf','e-ri','e-rf'].forEach(id=>document.getElementById(id).value='');
   renderDeps(null,[]);
+  aplicarModoAssistenteEtapa();
   document.getElementById('modal-etapa').classList.add('aberto');
   setTimeout(()=>document.getElementById('e-nome').focus(),80);
 }
@@ -566,6 +607,7 @@ function editarEtapa(id) {
   document.getElementById('e-ri').value     = e.dataRealInicio||'';
   document.getElementById('e-rf').value     = e.dataRealFim||'';
   renderDeps(id, e.dependencias||[]);
+  aplicarModoAssistenteEtapa();
   document.getElementById('modal-etapa').classList.add('aberto');
 }
 
@@ -580,12 +622,13 @@ function renderDeps(editId, sel) {
     </label>`).join('');
 }
 
-function fecharModalEtapa() { document.getElementById('modal-etapa').classList.remove('aberto'); }
+function fecharModalEtapa() { modoAssistente=false; document.getElementById('modal-etapa').classList.remove('aberto'); }
 
 async function salvarEtapa() {
   const nome = document.getElementById('e-nome').value.trim();
   if (!nome) { toast('Nome da etapa é obrigatório.','erro'); return; }
   const deps = [...document.querySelectorAll('#deps-wrap input:checked')].map(i=>i.value);
+  const anterior = idEdit ? etapas.find(x=>x.id===idEdit) : null;
   const etapa = {
     id:                  idEdit||uid(),
     obraId:              OBRA_ID,
@@ -604,14 +647,21 @@ async function salvarEtapa() {
     dataRealInicio:      document.getElementById('e-ri').value||null,
     dataRealFim:         document.getElementById('e-rf').value||null,
     dependencias:        deps,
-    checklist:           idEdit?(etapas.find(x=>x.id===idEdit)?.checklist||[]):[],
-    criadoEm:            idEdit?(etapas.find(x=>x.id===idEdit)?.criadoEm||hoje()):hoje(),
+    checklist:           anterior?.checklist||[],
+    materiais:           anterior?.materiais||[],
+    criadoEm:            anterior?.criadoEm||hoje(),
   };
-  etapas = idEdit ? etapas.map(x=>x.id===idEdit?etapa:x) : [...etapas,etapa];
-  fecharModalEtapa();
+  idEdit = etapa.id;
+  etapas = anterior ? etapas.map(x=>x.id===etapa.id?etapa:x) : [...etapas,etapa];
   await sync(`Etapa: ${nome}`);
   renderEtapas(); atualizarStats();
-  toast('Etapa salva!','sucesso');
+  if (modoAssistente) {
+    document.getElementById('modal-etapa').classList.remove('aberto');
+    abrirChecklist(etapa.id);
+  } else {
+    fecharModalEtapa();
+    toast('Etapa salva!','sucesso');
+  }
 }
 
 async function excluirEtapa(id) {
@@ -625,6 +675,14 @@ async function excluirEtapa(id) {
 }
 
 // ── CHECKLIST ──
+function aplicarModoAssistenteChecklist() {
+  document.getElementById('wiz-progress-cl').style.display = modoAssistente ? 'block' : 'none';
+  document.getElementById('bc-fechar').style.display   = modoAssistente ? 'none' : '';
+  document.getElementById('bc-salvar').style.display   = modoAssistente ? 'none' : '';
+  document.getElementById('bc-voltar').style.display   = modoAssistente ? '' : 'none';
+  document.getElementById('bc-seguinte').style.display = modoAssistente ? '' : 'none';
+}
+
 function abrirChecklist(etapaId) {
   clId = etapaId;
   const e = etapas.find(x=>x.id===etapaId); if(!e) return;
@@ -633,6 +691,7 @@ function abrirChecklist(etapaId) {
   document.getElementById('cl-nr').value='';
   document.getElementById('cl-no').value='true';
   renderClBody(e);
+  aplicarModoAssistenteChecklist();
   document.getElementById('modal-cl').classList.add('aberto');
 }
 
@@ -657,18 +716,20 @@ function renderClBody(e) {
     </div>`).join('');
 }
 
-function toggleClItem(itemId) {
+async function toggleClItem(itemId) {
   const e=etapas.find(x=>x.id===clId); if(!e) return;
   const item=e.checklist.find(i=>i.id===itemId); if(!item) return;
   item.concluida=!item.concluida;
   renderClBody(e);
+  await sync('Checklist atualizado');
 }
-function removerClItem(itemId) {
+async function removerClItem(itemId) {
   const e=etapas.find(x=>x.id===clId); if(!e) return;
   e.checklist=e.checklist.filter(i=>i.id!==itemId);
   renderClBody(e);
+  await sync('Checklist atualizado');
 }
-function addClItem() {
+async function addClItem() {
   const desc=document.getElementById('cl-nd').value.trim();
   if(!desc){toast('Informe a descrição.','aviso');return;}
   const e=etapas.find(x=>x.id===clId); if(!e) return;
@@ -677,6 +738,7 @@ function addClItem() {
   document.getElementById('cl-nd').value='';
   document.getElementById('cl-nr').value='';
   renderClBody(e);
+  await sync('Checklist atualizado');
 }
 async function salvarChecklist() {
   fecharChecklist();
@@ -684,7 +746,19 @@ async function salvarChecklist() {
   renderEtapas(); atualizarStats();
   toast('Checklist salvo!','sucesso');
 }
-function fecharChecklist() { document.getElementById('modal-cl').classList.remove('aberto'); }
+function fecharChecklist() { modoAssistente=false; document.getElementById('modal-cl').classList.remove('aberto'); }
+
+function voltarParaEtapa() {
+  const id = clId;
+  document.getElementById('modal-cl').classList.remove('aberto');
+  editarEtapa(id);
+}
+
+function seguirParaMateriais() {
+  const id = clId;
+  document.getElementById('modal-cl').classList.remove('aberto');
+  abrirMateriais(id);
+}
 
 // ── MATERIAIS ──
 const ClassLbl = {
@@ -708,6 +782,14 @@ function matStatusCalc(m) {
   return 'pendente';
 }
 
+function aplicarModoAssistenteMateriais() {
+  document.getElementById('wiz-progress-mat').style.display = modoAssistente ? 'block' : 'none';
+  document.getElementById('bm-cancelar').style.display = modoAssistente ? 'none' : '';
+  document.getElementById('bm-salvar').style.display   = modoAssistente ? 'none' : '';
+  document.getElementById('bm-voltar').style.display   = modoAssistente ? '' : 'none';
+  document.getElementById('bm-concluir').style.display = modoAssistente ? '' : 'none';
+}
+
 function abrirMateriais(etapaId) {
   matId = etapaId;
   const e = etapas.find(x => x.id === etapaId); if (!e) return;
@@ -716,6 +798,7 @@ function abrirMateriais(etapaId) {
   ['mn-prev','mn-min','mn-valprev'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('mn-class').value = 'obrigatorio_iniciar';
   renderMatBody(e);
+  aplicarModoAssistenteMateriais();
   document.getElementById('modal-mat').classList.add('aberto');
 }
 
@@ -867,7 +950,20 @@ async function salvarMateriais() {
   toast('Materiais salvos!', 'sucesso');
 }
 
-function fecharMateriais() { document.getElementById('modal-mat').classList.remove('aberto'); }
+function fecharMateriais() { modoAssistente=false; document.getElementById('modal-mat').classList.remove('aberto'); }
+
+function voltarParaChecklist() {
+  const id = matId;
+  document.getElementById('modal-mat').classList.remove('aberto');
+  abrirChecklist(id);
+}
+
+function concluirAssistente() {
+  modoAssistente = false;
+  document.getElementById('modal-mat').classList.remove('aberto');
+  renderEtapas(); atualizarStats();
+  toast('Etapa criada com sucesso!', 'sucesso');
+}
 
 // ── SYNC ──
 async function sync(msg) {
