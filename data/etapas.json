@@ -33,8 +33,8 @@
         "fornecedor": "",
         "valorPrevisto": 0,
         "valorComprado": 0,
-        "pedidoCompra": false,
-        "solicitacaoData": null,
+        "pedidoCompra": true,
+        "solicitacaoData": "2026-07-21",
         "obs": ""
       }
     ],
