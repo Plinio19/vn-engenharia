@@ -12,7 +12,7 @@
   <div class="topbar">
     <div>
       <div class="topbar-titulo">Cadastros</div>
-      <div class="topbar-sub">Sócios e Clientes</div>
+      <div class="topbar-sub">Sócios, Clientes, Funcionários, Materiais e Fornecedores</div>
     </div>
     <div class="topbar-acoes">
       <div class="sync-pill">
@@ -22,10 +22,20 @@
       <button class="btn btn-outline btn-sm no-print" onclick="init()" title="Buscar a versão mais recente do GitHub agora">🔄 Sincronizar agora</button>
     </div>
   </div>
-  <div class="page" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+  <div class="page">
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="chip ativo" id="tab-socios"      onclick="setTab('socios')">👥 Sócios</button>
+        <button class="chip"       id="tab-clientes"    onclick="setTab('clientes')">🏢 Clientes</button>
+        <button class="chip"       id="tab-funcionarios" onclick="setTab('funcionarios')">🔨 Funcionários</button>
+        <button class="chip"       id="tab-materiais"   onclick="setTab('materiais')">📦 Materiais</button>
+        <button class="chip"       id="tab-fornecedores" onclick="setTab('fornecedores')">🚚 Fornecedores</button>
+      </div>
+    </div>
 
     <!-- ── SÓCIOS ── -->
-    <div>
+    <div id="painel-socios">
       <div class="card">
         <div class="card-header">
           <h2>👥 Sócios</h2>
@@ -38,7 +48,7 @@
     </div>
 
     <!-- ── CLIENTES ── -->
-    <div>
+    <div id="painel-clientes" style="display:none;">
       <div class="card">
         <div class="card-header">
           <h2>🏢 Clientes</h2>
@@ -50,12 +60,12 @@
       </div>
     </div>
 
-    <!-- ── PRESTADORES / FUNCIONÁRIOS ── -->
-    <div style="grid-column:1/-1;">
+    <!-- ── FUNCIONÁRIOS / PRESTADORES ── -->
+    <div id="painel-funcionarios" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>🔨 Prestadores & Funcionários</h2>
-          <button class="btn btn-primary btn-sm" onclick="abrirModalPrestador()">+ Novo Prestador</button>
+          <h2>🔨 Funcionários & Prestadores</h2>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalPrestador()">+ Novo Funcionário</button>
         </div>
         <div class="card-body" id="lista-prestadores">
           <div style="text-align:center;padding:24px;color:var(--texto-leve);">Carregando...</div>
@@ -64,7 +74,7 @@
     </div>
 
     <!-- ── MATERIAIS (CATÁLOGO) ── -->
-    <div style="grid-column:1/-1;">
+    <div id="painel-materiais" style="display:none;">
       <div class="card">
         <div class="card-header">
           <h2>📦 Materiais (Catálogo)</h2>
@@ -73,6 +83,22 @@
         <div class="card-body">
           <p class="hint" style="margin-bottom:10px;">Cadastre aqui os materiais usados com frequência — no Cronograma, ao adicionar material a uma etapa, você poderá selecionar direto desse catálogo em vez de digitar.</p>
           <div id="lista-materiais">
+            <div style="text-align:center;padding:24px;color:var(--texto-leve);">Carregando...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── FORNECEDORES ── -->
+    <div id="painel-fornecedores" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>🚚 Fornecedores</h2>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalFornecedor()">+ Novo Fornecedor</button>
+        </div>
+        <div class="card-body">
+          <p class="hint" style="margin-bottom:10px;">Cadastre aqui os fornecedores — ao gerar um Pedido de Compra em Compras, você poderá selecionar direto desse catálogo em vez de digitar.</p>
+          <div id="lista-fornecedores">
             <div style="text-align:center;padding:24px;color:var(--texto-leve);">Carregando...</div>
           </div>
         </div>
@@ -180,6 +206,38 @@
   </div>
 </div>
 
+<!-- MODAL FORNECEDOR -->
+<div class="overlay" id="modal-fornecedor">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <h2 id="mforn-titulo">Novo Fornecedor</h2>
+      <button class="btn-fechar" onclick="fecharModal('modal-fornecedor')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="mforn-id"/>
+      <div class="form-campo"><label>Razão Social / Nome *</label><input id="mforn-nome" type="text" placeholder="Ex: Depósito São José Materiais LTDA"/></div>
+      <div class="form-campo">
+        <label>CNPJ / CPF</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="mforn-cnpj" type="text" placeholder="00.000.000/0001-00" style="flex:1;"/>
+          <button class="btn btn-outline btn-sm" onclick="buscarCNPJGenerico('mforn')" title="Buscar dados pelo CNPJ">🔍 Buscar</button>
+        </div>
+      </div>
+      <div class="form-campo"><label>Categoria / O que fornece</label><input id="mforn-cat" type="text" placeholder="Ex: Cimento e Argamassa, Elétrico, Madeira..."/></div>
+      <div class="form-campo"><label>Contato (nome)</label><input id="mforn-contato" type="text"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-campo"><label>Telefone</label><input id="mforn-tel" type="text" placeholder="(00) 00000-0000"/></div>
+        <div class="form-campo"><label>E-mail</label><input id="mforn-email" type="email"/></div>
+      </div>
+      <div class="form-campo"><label>Observações</label><textarea id="mforn-obs" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('modal-fornecedor')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarFornecedor()">✓ Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 <script src="../assets/core.js"></script>
 <script>
@@ -189,32 +247,47 @@ let socios      = []; let shaS = null;
 let clientes    = []; let shaC = null;
 let prestadores = []; let shaP = null;
 let materiaisCat = []; let shaM = null;
+let fornecedores = []; let shaF = null;
+let tab = 'socios';
+
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('ativo'));
+  document.getElementById('tab-'+t).classList.add('ativo');
+  ['socios','clientes','funcionarios','materiais','fornecedores'].forEach(p => {
+    document.getElementById('painel-'+p).style.display = (p===t) ? '' : 'none';
+  });
+}
 
 async function init() {
   socios      = carregarLocal('vne_socios')      || [];
   clientes    = carregarLocal('vne_clientes')    || [];
   prestadores = carregarLocal('vne_prestadores') || [];
   materiaisCat= carregarLocal('vne_materiais_catalogo') || [];
-  renderSocios(); renderClientes(); renderPrestadores(); renderMateriais();
+  fornecedores= carregarLocal('vne_fornecedores') || [];
+  renderSocios(); renderClientes(); renderPrestadores(); renderMateriais(); renderFornecedores();
 
   if (!configurado()) { setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rS, rC, rP, rM] = await Promise.all([
+    const [rS, rC, rP, rM, rF] = await Promise.all([
       carregarDados('data/socios.json'),
       carregarDados('data/clientes.json'),
       carregarDados('data/prestadores.json'),
       carregarDados('data/materiais_catalogo.json'),
+      carregarDados('data/fornecedores.json'),
     ]);
     socios      = rS.lista; shaS = rS.sha;
     clientes    = rC.lista; shaC = rC.sha;
     prestadores = rP.lista; shaP = rP.sha;
     materiaisCat= rM.lista; shaM = rM.sha;
+    fornecedores= rF.lista; shaF = rF.sha;
     salvarLocal('vne_socios',      socios);
     salvarLocal('vne_clientes',    clientes);
     salvarLocal('vne_prestadores', prestadores);
     salvarLocal('vne_materiais_catalogo', materiaisCat);
-    renderSocios(); renderClientes(); renderPrestadores(); renderMateriais();
+    salvarLocal('vne_fornecedores', fornecedores);
+    renderSocios(); renderClientes(); renderPrestadores(); renderMateriais(); renderFornecedores();
     setSyncStatus('verde','Conectado');
   } catch(e) { setSyncStatus('vermelho','Erro'); }
 }
@@ -307,18 +380,21 @@ function abrirModalCliente(c) {
 
 function editarCliente(id) { abrirModalCliente(clientes.find(x=>x.id===id)); }
 
-async function buscarCNPJ() {
-  const cnpj = document.getElementById('mcli-cnpj').value.replace(/\D/g,'');
+async function buscarCNPJ() { return buscarCNPJGenerico('mcli'); }
+
+async function buscarCNPJGenerico(prefixo) {
+  const cnpj = document.getElementById(`${prefixo}-cnpj`).value.replace(/\D/g,'');
   if (cnpj.length !== 14) { toast('CNPJ inválido (14 dígitos).','aviso'); return; }
   toast('Buscando...','');
   try {
     const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
     if (!r.ok) throw new Error('Não encontrado');
     const d = await r.json();
-    document.getElementById('mcli-nome').value    = d.razao_social || '';
-    document.getElementById('mcli-email').value   = d.email || '';
-    document.getElementById('mcli-tel').value     = d.ddd_telefone_1 ? `(${d.ddd_telefone_1}) ${d.telefone_1||''}` : '';
-    document.getElementById('mcli-cnpj').value    = cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+    document.getElementById(`${prefixo}-nome`).value = d.razao_social || '';
+    const campoEmail = document.getElementById(`${prefixo}-email`);
+    if (campoEmail) campoEmail.value = d.email || '';
+    document.getElementById(`${prefixo}-tel`).value = d.ddd_telefone_1 ? `(${d.ddd_telefone_1}) ${d.telefone_1||''}` : '';
+    document.getElementById(`${prefixo}-cnpj`).value = cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
     toast('Dados preenchidos!','sucesso');
   } catch(e) { toast('CNPJ não encontrado na Receita Federal.','aviso'); }
 }
@@ -471,6 +547,73 @@ async function excluirMaterial(id) {
   materiaisCat = materiaisCat.filter(x=>x.id!==id);
   salvarLocal('vne_materiais_catalogo', materiaisCat); renderMateriais();
   if (configurado()) try { shaM = await salvarDados('data/materiais_catalogo.json', materiaisCat, shaM, 'Excluir material'); } catch(e) {}
+}
+
+// ── RENDER FORNECEDORES ──
+function renderFornecedores() {
+  const cont = document.getElementById('lista-fornecedores');
+  if (!fornecedores.length) {
+    cont.innerHTML = `<div style="text-align:center;padding:24px;color:var(--texto-leve);">Nenhum fornecedor cadastrado.</div>`;
+    return;
+  }
+  cont.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0;">` +
+    fornecedores.map(f => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 8px;border-bottom:1px solid var(--cinza);">
+        <div>
+          <div style="font-weight:700;">${esc(f.nome)}</div>
+          <div style="font-size:.78rem;color:var(--texto-leve);">
+            ${f.categoria ? `${esc(f.categoria)}` : ''}
+            ${f.contato ? ` · ${esc(f.contato)}` : ''}
+            ${f.telefone ? ` · ${esc(f.telefone)}` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-outline btn-sm" onclick='editarFornecedor("${f.id}")'>✏️</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--vermelho);" onclick='excluirFornecedor("${f.id}")'>🗑</button>
+        </div>
+      </div>`).join('') + `</div>`;
+}
+
+function abrirModalFornecedor(f) {
+  document.getElementById('mforn-titulo').textContent = f ? 'Editar Fornecedor' : 'Novo Fornecedor';
+  document.getElementById('mforn-id').value      = f?.id       || '';
+  document.getElementById('mforn-nome').value    = f?.nome     || '';
+  document.getElementById('mforn-cnpj').value    = f?.cnpj     || '';
+  document.getElementById('mforn-cat').value     = f?.categoria|| '';
+  document.getElementById('mforn-contato').value = f?.contato  || '';
+  document.getElementById('mforn-tel').value     = f?.telefone || '';
+  document.getElementById('mforn-email').value   = f?.email    || '';
+  document.getElementById('mforn-obs').value     = f?.obs      || '';
+  document.getElementById('modal-fornecedor').classList.add('aberto');
+}
+
+function editarFornecedor(id) { abrirModalFornecedor(fornecedores.find(x=>x.id===id)); }
+
+async function salvarFornecedor() {
+  const nome = document.getElementById('mforn-nome').value.trim();
+  if (!nome) { toast('Informe o nome.','aviso'); return; }
+  const id = document.getElementById('mforn-id').value || uid();
+  const obj = {
+    id, nome,
+    cnpj:      document.getElementById('mforn-cnpj').value.trim(),
+    categoria: document.getElementById('mforn-cat').value.trim(),
+    contato:   document.getElementById('mforn-contato').value.trim(),
+    telefone:  document.getElementById('mforn-tel').value.trim(),
+    email:     document.getElementById('mforn-email').value.trim(),
+    obs:       document.getElementById('mforn-obs').value.trim(),
+    criadoEm: hoje(),
+  };
+  fornecedores = fornecedores.filter(x=>x.id!==id); fornecedores.push(obj);
+  salvarLocal('vne_fornecedores', fornecedores); renderFornecedores(); fecharModal('modal-fornecedor');
+  toast('Fornecedor salvo!','sucesso');
+  if (configurado()) try { shaF = await salvarDados('data/fornecedores.json', fornecedores, shaF, `Fornecedor: ${nome}`); } catch(e) { toast('Erro sync','aviso'); }
+}
+
+async function excluirFornecedor(id) {
+  if (!confirm('Excluir fornecedor?')) return;
+  fornecedores = fornecedores.filter(x=>x.id!==id);
+  salvarLocal('vne_fornecedores', fornecedores); renderFornecedores();
+  if (configurado()) try { shaF = await salvarDados('data/fornecedores.json', fornecedores, shaF, 'Excluir fornecedor'); } catch(e) {}
 }
 
 document.querySelectorAll('.overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) m.classList.remove('aberto'); }));

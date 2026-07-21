@@ -145,7 +145,7 @@
       <button class="btn-fechar" onclick="fecharModalPedido()">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding:0 20px 4px;">
-      <div class="form-campo"><label>Fornecedor *</label><input type="text" id="ped-fornecedor" placeholder="Nome do fornecedor"/></div>
+      <div class="form-campo"><label>Fornecedor *</label><input type="text" id="ped-fornecedor" list="lista-catalogo-forn" placeholder="Nome do fornecedor" onchange="preencherPorFornecedor()"/><datalist id="lista-catalogo-forn"></datalist></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="form-campo"><label>Contato (telefone/e-mail)</label><input type="text" id="ped-contato" placeholder="Opcional"/></div>
         <div class="form-campo"><label>Prazo de Entrega Previsto</label><input type="date" id="ped-prazo"/></div>
@@ -205,22 +205,42 @@ function matStatusCalc(m) {
 }
 
 // ── INIT ──
+let catalogoForn = [];
+
 async function init() {
   etapas = carregarLocal(LS_ET) || [];
   obras  = carregarLocal(LS_OB) || [];
   pedidosCompra = carregarLocal(LS_PED) || [];
+  catalogoForn = carregarLocal('vne_fornecedores') || [];
+  renderCatalogoFornDatalist();
   popularFiltroObra(); atualizarStats(); render();
 
   if (!configurado()) { setSyncStatus('vermelho','Não configurado'); return; }
   setSyncStatus('amarelo','Carregando...');
   try {
-    const [rE, rO, rP] = await Promise.all([carregarDados(PATH_ET), carregarDados(PATH_OB), carregarDados(PATH_PED)]);
+    const [rE, rO, rP, rF] = await Promise.all([carregarDados(PATH_ET), carregarDados(PATH_OB), carregarDados(PATH_PED), carregarDados('data/fornecedores.json')]);
     etapas = rE.lista; salvarLocal(LS_ET, etapas);
     obras  = rO.lista; salvarLocal(LS_OB, obras);
     pedidosCompra = rP.lista; shaPed = rP.sha; salvarLocal(LS_PED, pedidosCompra);
+    catalogoForn = rF.lista; salvarLocal('vne_fornecedores', catalogoForn);
+    renderCatalogoFornDatalist();
     popularFiltroObra(); atualizarStats(); render();
     setSyncStatus('verde','Conectado');
   } catch(err) { setSyncStatus('vermelho','Erro'); toast('Usando cache local.','aviso'); }
+}
+
+function renderCatalogoFornDatalist() {
+  const dl = document.getElementById('lista-catalogo-forn');
+  if (!dl) return;
+  dl.innerHTML = catalogoForn.map(f => `<option value="${esc(f.nome)}"></option>`).join('');
+}
+
+function preencherPorFornecedor() {
+  const nome = document.getElementById('ped-fornecedor').value.trim();
+  const f = catalogoForn.find(x => x.nome.toLowerCase() === nome.toLowerCase());
+  if (!f) return;
+  const campoContato = document.getElementById('ped-contato');
+  if (!campoContato.value) campoContato.value = [f.contato, f.telefone, f.email].filter(Boolean).join(' · ');
 }
 
 async function recarregar() { init(); }
