@@ -354,6 +354,7 @@ function renderPendentes() {
           ${obra?.cliente?`<div class="obra-header-sub">${esc(obra.cliente)}</div>`:''}
         </div>
         <div class="obra-header-badge">${etBloq.length} etapa(s) bloqueada(s)</div>
+        ${obra?.materialPorConta!=='empresa'?`<button class="btn btn-outline btn-sm no-print" style="background:#fff;" onclick='exportarNecessidadeObra("${obraId}")'>📤 Exportar Material</button>`:''}
       </div>
       ${etBloq.map(e => {
         const pend = (e.materiais||[]).filter(m =>
@@ -402,6 +403,7 @@ function renderTodos() {
           ${obra?.cliente?`<div class="obra-header-sub">${esc(obra.cliente)}</div>`:''}
         </div>
         <div class="obra-header-badge">${etOb.reduce((s,e)=>s+(e.materiais||[]).length,0)} materiais</div>
+        ${obra?.materialPorConta!=='empresa'?`<button class="btn btn-outline btn-sm no-print" style="background:#fff;" onclick='exportarNecessidadeObra("${obraId}")'>📤 Exportar Material</button>`:''}
       </div>
       ${etOb.map(e => {
         totalMats += (e.materiais||[]).length;
