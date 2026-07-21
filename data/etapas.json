@@ -39,5 +39,27 @@
       }
     ],
     "criadoEm": "2026-07-21"
+  },
+  {
+    "id": "mrtyp37j7iclq",
+    "obraId": "mrtyoqm7rs4qy",
+    "nome": "FUNDAÇÃO",
+    "codigo": "",
+    "ordem": 1,
+    "categoria": "fundacao",
+    "responsavel": "vitor",
+    "descricao": "",
+    "observacoes": "",
+    "status": "planejada",
+    "peso": 0,
+    "percentualExecutado": 0,
+    "dataPrevistoInicio": null,
+    "dataPrevistoFim": null,
+    "dataRealInicio": null,
+    "dataRealFim": null,
+    "dependencias": [],
+    "checklist": [],
+    "materiais": [],
+    "criadoEm": "2026-07-21"
   }
 ]
